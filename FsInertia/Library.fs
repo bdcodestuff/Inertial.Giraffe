@@ -40,17 +40,19 @@ type Page =
     }
 
     member x.toJson () =
-        JsonSerializer.Serialize(x)
+        JsonSerializer.Serialize<Page>(x)
 
 module Handlers =
 
     let handleProps (ctx:HttpContext) componentName (props:Map<string,obj>) =
+        // check if partial data request with specified component name
         let isPartialReq, filter =
             match ctx.Request.Headers.InertiaPartialData, ctx.Request.Headers.InertiaPartialComponent with
             | Some partialData, Some comp when comp = componentName ->
                 true,
                 partialData.Split(',') 
                 |> Array.filter (fun x -> String.IsNullOrEmpty x |> not)
+                |> Array.map (fun x -> x.Trim())
             | _ ->
                 false,
                 [||]
