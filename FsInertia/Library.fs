@@ -1,6 +1,7 @@
 ﻿module FsInertia
 
 open System
+open System.Threading.Tasks
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Http.Extensions
 open Microsoft.Extensions.Primitives
@@ -33,16 +34,18 @@ type IHeaderDictionary with
 
 type Page =
     {
-        Component : string
-        Props : Map<string,obj>
-        Version : string
-        Url : string
+        ``component`` : string
+        props : Map<string,obj>
+        version : string
+        url : string
     }
 
     member x.toJson () =
         JsonSerializer.Serialize<Page>(x)
 
 module Handlers =
+
+    open FSharpx.Collections
 
     let handleProps (ctx:HttpContext) componentName (props:Map<string,obj>) =
         // check if partial data request with specified component name
@@ -68,26 +71,42 @@ module Handlers =
             | (true, a) ->
                 try 
                     let sharedProps = try a :?> Map<string,obj> with exn -> failwith exn.Message
-                    Map.fold (fun acc key value -> Map.add key value acc) filteredProps sharedProps
+                    Map.union filteredProps sharedProps
                 with exn -> failwith exn.Message
-        // Lazy load if full load; eval on partial 
-        if isPartialReq then
-            props |> Map.map (fun _ y -> match y with :? Func<unit,obj> as f -> f.Invoke( () ) | b -> b  )
-        else 
-            props
+        let finalProps =
+            // props with type fun () -> obj always included on first visit, optionally on partial reloads, only evaluated when needed
+            if isPartialReq then
+                props 
+                |> Map.map (fun _ y -> 
+                    match y with 
+                    | :? (unit -> obj) as f -> f () |> Some
+                    | :? (unit -> Task<obj>) as f -> f () |> Async.AwaitTask |> Async.RunSynchronously |> Some
+                    | :? (unit -> Async<obj>) as f -> f () |> Async.RunSynchronously |> Some
+                    | b -> Some b  )
+            else 
+                props 
+                |> Map.map (fun _ y -> 
+                    match y with 
+                    | :? (unit -> obj) -> None
+                    | :? (unit -> Task<obj>) -> None
+                    | :? (unit -> Async<obj>) -> None
+                    | b -> Some b  )
+        finalProps |> Map.choose(fun x y -> id y)
 
     let setCsrfCookie : HttpHandler =
         fun next ctx -> 
             let tokenSet = ctx.GetService<IAntiforgery>().GetTokens(ctx)
-            ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken)
+            let options = new CookieOptions()
+            options.SameSite <- SameSiteMode.Strict
+            ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
             next ctx
 
     let generatePage (nextHandler: Page -> HttpHandler) ctx componentName (props:Map<string,obj>) (url:string option) version : HttpHandler =
         {
-            Component = componentName
-            Props = handleProps ctx componentName props
-            Version = version
-            Url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
+            ``component`` = componentName
+            props = handleProps ctx componentName props
+            version = version
+            url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
         }
         |> nextHandler
 
@@ -137,9 +156,9 @@ module Core =
     open Handlers
 
     
-    let shareData (props:Map<string,obj>) : HttpHandler =
+    let shareData (props:HttpContext -> Map<string,obj>) : HttpHandler =
         fun next ctx ->
-            ctx.Items["InertiaSharedData"] <- props
+            ctx.Items["InertiaSharedData"] <- (props ctx)
             next ctx
 
     let renderInertia componentName (props:Map<string,obj>) withTemplate assetsVersion url : HttpHandler =
