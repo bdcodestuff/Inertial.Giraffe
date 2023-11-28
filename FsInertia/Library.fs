@@ -75,7 +75,8 @@ module Handlers =
     open FSharp.Reflection
     
     let handleProps (ctx:HttpContext) componentName (props:Map<string,obj>) =
-        // check if partial data request with specified component name
+        task {
+            // check if partial data request with specified component name
         let isPartialReq, filter =
             match ctx.Request.Headers.InertiaPartialData, ctx.Request.Headers.InertiaPartialComponent with
             | Some partialData, Some comp when comp = componentName ->
@@ -105,21 +106,59 @@ module Handlers =
             props
             |> Map.partition (fun _ v -> FSharpType.IsFunction(v.GetType()))
         
+        
         if isPartialReq then
-            // evaluate function props and union with non function props
-            functions
-                |> Map.map (fun _ y ->
-                    let ty = y.GetType()
-                    let tyFrom, tyTo = FSharpType.GetFunctionElements(ty)
-                    match y with 
-                    | :? (unit -> obj) as f -> f ()
-                    | :? (unit -> Task<obj>) as f -> f () |> Async.AwaitTask |> Async.RunSynchronously
-                    | :? (unit -> Async<obj>) as f -> f () |> Async.RunSynchronously
-                    | b -> failwith $"unable to handle func prop with type: {b.GetType()}" )
-            |> Map.union nonFunctions
+            // partition function type props into maps of either async or sync functions
+            let asyncFunctions, syncFunctions =
+                functions
+                |> Map.partition (fun _ v -> 
+                    match v with
+                    | :? (unit -> Task<obj>) -> true
+                    | :? (unit -> Async<obj>) -> true
+                    | b -> false
+                )
+            
+            // convert tasks to async values, separate keys and values
+            let asyncKeys,asyncValues =
+                asyncFunctions 
+                    |> Map.map (fun _ y ->
+                        match y with 
+                        | :? (unit -> Task<obj>) as f -> f () |> Async.AwaitTask
+                        | :? (unit -> Async<obj>) as f -> f ()
+                        | b -> failwith $"unable to handle func prop with type: {b.GetType()}")
+                        |> Map.toList
+                        |> List.fold (fun (keys,values) (k,v) -> ((k::keys),(v::values)) ) ([],[])
+            
+            // evaluate the non-async functions
+            let evaluatedSyncs =
+                syncFunctions 
+                    |> Map.map (fun _ y ->
+                        match y with 
+                        | :? (unit -> obj) as f -> f ()
+                        | b -> failwith $"unable to handle func prop with type: {b.GetType()}" )
+            
+            // run all the async functions in parallel
+            let! values = Async.Parallel asyncValues
+
+            // zip the keys back to the values and convert back to a Map structure
+            let evaluatedAsyncs = 
+                values 
+                |> List.ofArray
+                |> List.zip asyncKeys
+                |> Map.ofList
+
+            // merge the evaluated async and sync function maps
+            let evaluatedMerged =
+                Map.union evaluatedAsyncs evaluatedSyncs
+
+            // return the merged evaluated functions and non-functions
+            return Map.union nonFunctions evaluatedMerged
+
         else 
-            // ignore function props on initial load or full reload
-            nonFunctions
+            // ignore all function type props on full page loads
+            return nonFunctions
+        }
+        
 
     let setCsrfCookie : HttpHandler =
         fun next ctx -> 
@@ -130,13 +169,20 @@ module Handlers =
             next ctx
 
     let generatePage (nextHandler: Page -> HttpHandler) ctx componentName (props:Map<string,obj>) (url:string option) version : HttpHandler =
-        {
-            ``component`` = componentName
-            props = handleProps ctx componentName props
-            version = version
-            url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
-        }
-        |> nextHandler
+        fun next ctx -> 
+            task {
+                let! evaluatedProps = handleProps ctx componentName props
+                let page =
+                    {
+                        ``component`` = componentName
+                        props = evaluatedProps
+                        version = version
+                        url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
+                    }
+                return! (nextHandler page) next ctx
+            }
+        
+        
 
     let checkRedirect : HttpHandler =
         fun next ctx -> 
