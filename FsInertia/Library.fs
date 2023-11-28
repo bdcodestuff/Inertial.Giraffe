@@ -106,16 +106,19 @@ module Handlers =
             |> Map.partition (fun _ v -> FSharpType.IsFunction(v.GetType()))
         
         if isPartialReq then
+            // evaluate function props and union with non function props
             functions
-            |> Map.map (fun _ y ->
-                let ty = y.GetType()
-                let tyFrom, tyTo = FSharpType.GetFunctionElements(ty)
-                match y with 
-                | :? (unit -> obj) as f -> f ()
-                | :? (unit -> Task<obj>) as f -> f () |> Async.AwaitTask |> Async.RunSynchronously
-                | :? (unit -> Async<obj>) as f -> f () |> Async.RunSynchronously
-                | b -> failwith $"unable to handle func prop with type: {b.GetType()}" )
+                |> Map.map (fun _ y ->
+                    let ty = y.GetType()
+                    let tyFrom, tyTo = FSharpType.GetFunctionElements(ty)
+                    match y with 
+                    | :? (unit -> obj) as f -> f ()
+                    | :? (unit -> Task<obj>) as f -> f () |> Async.AwaitTask |> Async.RunSynchronously
+                    | :? (unit -> Async<obj>) as f -> f () |> Async.RunSynchronously
+                    | b -> failwith $"unable to handle func prop with type: {b.GetType()}" )
+            |> Map.union nonFunctions
         else 
+            // ignore function props on initial load or full reload
             nonFunctions
 
     let setCsrfCookie : HttpHandler =
