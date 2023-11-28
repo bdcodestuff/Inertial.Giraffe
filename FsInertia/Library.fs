@@ -43,10 +43,37 @@ type Page =
     member x.toJson () =
         JsonSerializer.Serialize<Page>(x)
 
+module Dynamic =
+    open System
+    open FSharp.Reflection
+
+    type InvokeResult = 
+        | Success of obj
+        | ObjectWasNotAFunction of Type
+
+    let dynamicFunction (fn:obj) (args:obj seq) =
+        let rec dynamicFunctionInternal (next:obj) (args:obj list) : InvokeResult =
+            match args.IsEmpty with
+            | false ->
+                let fType = next.GetType()
+                if FSharpType.IsFunction fType then
+                    let (head, tail) = (args.Head, args.Tail)
+                    let methodInfo = 
+                        fType.GetMethods()
+                        |> Seq.filter (fun x -> x.Name = "Invoke" && x.GetParameters().Length = 1)
+                        |> Seq.head
+                    let partalResult = methodInfo.Invoke(next, [| head |])
+                    dynamicFunctionInternal partalResult tail
+                else ObjectWasNotAFunction fType
+            | true ->
+                Success(next)
+        dynamicFunctionInternal fn (args |> List.ofSeq )
+
 module Handlers =
 
     open FSharpx.Collections
-
+    open FSharp.Reflection
+    
     let handleProps (ctx:HttpContext) componentName (props:Map<string,obj>) =
         // check if partial data request with specified component name
         let isPartialReq, filter =
@@ -73,25 +100,26 @@ module Handlers =
                     let sharedProps = try a :?> Map<string,obj> with exn -> failwith exn.Message
                     Map.union filteredProps sharedProps
                 with exn -> failwith exn.Message
+        
+        let functions, nonFunctions =
+            props
+            |> Map.partition (fun _ v -> FSharpType.IsFunction(v.GetType()))
+        
         let finalProps =
             // props with type fun () -> obj always included on first visit, optionally on partial reloads, only evaluated when needed
             if isPartialReq then
-                props 
-                |> Map.map (fun _ y -> 
+                functions
+                |> Map.map (fun _ y ->
+                    let ty = y.GetType()
+                    let tyFrom, tyTo = FSharpType.GetFunctionElements(ty)
                     match y with 
-                    | :? (unit -> obj) as f -> f () |> Some
-                    | :? (unit -> Task<obj>) as f -> f () |> Async.AwaitTask |> Async.RunSynchronously |> Some
-                    | :? (unit -> Async<obj>) as f -> f () |> Async.RunSynchronously |> Some
-                    | b -> Some b  )
+                    | :? (unit -> obj) as f -> f ()
+                    | :? (unit -> Task<obj>) as f -> f () |> Async.AwaitTask |> Async.RunSynchronously
+                    | :? (unit -> Async<obj>) as f -> f () |> Async.RunSynchronously
+                    | b -> failwith $"unable to handle func prop with type: {b.GetType()}" )
             else 
-                props 
-                |> Map.map (fun _ y -> 
-                    match y with 
-                    | :? (unit -> obj) -> None
-                    | :? (unit -> Task<obj>) -> None
-                    | :? (unit -> Async<obj>) -> None
-                    | b -> Some b  )
-        finalProps |> Map.choose(fun x y -> id y)
+                nonFunctions
+        finalProps
 
     let setCsrfCookie : HttpHandler =
         fun next ctx -> 
