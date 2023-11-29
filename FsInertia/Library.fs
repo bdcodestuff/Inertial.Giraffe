@@ -82,7 +82,7 @@ module Handlers =
         
         
         if isPartialReq then
-            // partition function type props into maps of either async or sync functions
+            // partition function type props into maps of either async or sync functions based on type signature
             let asyncFunctions, syncFunctions =
                 functions
                 |> Map.partition (fun _ v -> 
@@ -93,7 +93,7 @@ module Handlers =
                 )
             
             // convert tasks to async values, separate keys and values
-            let asyncKeys,asyncValues =
+            let asyncKeys, asyncValues =
                 asyncFunctions 
                     |> Map.map (fun _ y ->
                         match y with 
@@ -101,7 +101,7 @@ module Handlers =
                         | :? (unit -> Async<obj>) as f -> f ()
                         | b -> failwith $"unable to handle func prop with type: {b.GetType()}")
                         |> Map.toList
-                        |> List.fold (fun (keys,values) (k,v) -> ((k::keys),(v::values)) ) ([],[])
+                        |> List.fold (fun (keys,values) (k,v) -> ( (k::keys),(v::values) )) ([],[])
             
             // evaluate the non-async functions
             let evaluatedSyncs =
@@ -111,12 +111,12 @@ module Handlers =
                         | :? (unit -> obj) as f -> f ()
                         | b -> failwith $"unable to handle func prop with type: {b.GetType()}" )
             
-            // run all the async functions in parallel
-            let! values = Async.Parallel asyncValues
+            // evaluate all the async functions in parallel
+            let! asyncFuncValues = Async.Parallel asyncValues
 
             // zip the keys back to the values and convert back to a Map structure
             let evaluatedAsyncs = 
-                values 
+                asyncFuncValues 
                 |> List.ofArray
                 |> List.zip asyncKeys
                 |> Map.ofList
