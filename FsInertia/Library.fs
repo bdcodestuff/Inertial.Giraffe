@@ -18,7 +18,7 @@ let private hdr (headers : IHeaderDictionary) hdr =
 type IHeaderDictionary with
   
     /// Inertia Request
-    member this.Inertia with get () = hdr this "X-Inertia"
+    member this.Inertia with get () = hdr this "X-Inertia" |> Option.map bool.Parse
 
     /// Inertia Version
     member this.InertiaVersion with get () = hdr this "X-Inertia-Version"
@@ -31,6 +31,28 @@ type IHeaderDictionary with
     
     /// Inertia Partial Component
     member this.InertiaPartialComponent with get () = hdr this "X-Inertia-Partial-Component"
+
+    /// Get the token from request set by axios when XSRF-COOKIE is present
+    member this.XSRFToken with get () = hdr this "X-XSRF-TOKEN"
+
+    // MODAL
+
+    /// The modal key header contained in the request
+    member this.InertiaModalKey with get () = hdr this "X-Inertia-Modal-Key"
+
+    /// The modal redirect url in the request
+    member this.InertiaModalRedirectUrl with get () = hdr this "X-Inertia-Modal-Redirect"
+
+/// Extensions for the request object
+type HttpRequest with
+
+    /// If X-Inertia-Modal-Key header is present then return the key otherwise create a new guid key
+    member this.getInertiaModalKey with get () = 
+        this.Headers.InertiaModalKey 
+        |> Option.defaultValue (Guid.NewGuid().ToString())
+
+    /// Check whether this request was initiated from Inertia
+    member this.IsInertia with get () = this.Headers.Inertia |> Option.defaultValue false
 
 type Page =
     {
@@ -134,13 +156,39 @@ module Handlers =
         }
         
 
-    let setCsrfCookie : HttpHandler =
+    /// Validate CSRF for both client initiated inertia reqs and full page server reload reqs
+    let handleCSRF : HttpHandler =
         fun next ctx -> 
-            let tokenSet = ctx.GetService<IAntiforgery>().GetTokens(ctx)
-            let options = new CookieOptions()
-            options.SameSite <- SameSiteMode.Strict
-            ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
-            next ctx
+            task {
+                // check if this request initiates from inertiajs
+                if ctx.Request.IsInertia then
+                    // check header for token sent by client and for matching cookie set by server
+                    match ctx.Request.Headers.XSRFToken, ctx.GetCookieValue("XSRF-TOKEN") with
+                    | Some token, Some cookie ->
+                        // verify they match
+                        if token = cookie then
+                            // pass through to next handler
+                            return! next ctx
+                        else
+                            // clear reponse, set 403 status and return early
+                            return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
+                    | _ ->
+                        return! (clearResponse >=> setStatusCode StatusCodes.Status419AuthenticationTimeout) earlyReturn ctx
+                else
+                    let antiFrg = ctx.GetService<IAntiforgery>()
+                    // this is true if request uses a safe HTTP method or contains a valid antiforgery token
+                    let! isValidServerCSRF = antiFrg.IsRequestValidAsync ctx
+                    if isValidServerCSRF then
+                        // if we have valid CSRF tokens (cookies and headers match) then set CSRF token cookie for client calls to mirror back via header
+                        let tokenSet = ctx.GetService<IAntiforgery>().GetTokens(ctx)
+                        let options = new CookieOptions()
+                        options.SameSite <- SameSiteMode.Strict
+                        ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
+                        // pass through to hext handler
+                        return! next ctx
+                    else 
+                        return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
+            }
 
     let generatePage (nextHandler: Page -> HttpHandler) ctx componentName (props:Map<string,obj>) (url:string option) version : HttpHandler =
         fun next ctx -> 
@@ -155,7 +203,6 @@ module Handlers =
                     }
                 return! (nextHandler page) next ctx
             }
-        
         
 
     let checkRedirect : HttpHandler =
@@ -176,26 +223,23 @@ module Handlers =
 
     let checkInertiaRequestAndVersion (version:string) : HttpHandler =
         fun next ctx ->
-            match ctx.Request.Headers.Inertia with
-            | Some "true" when ctx.Request.Method = HttpMethods.Get ->
-                // check asset version in context
+            if ctx.Request.IsInertia && ctx.Request.Method = HttpMethods.Get then 
                 match ctx.Request.Headers.InertiaVersion with
                 | Some a when a <> version ->
                     forceRefresh next ctx
                 | _ -> next ctx
-            | Some "true" ->
+            else if ctx.Request.IsInertia then
                 checkRedirect next ctx
-            | _ -> 
+            else 
                 next ctx
 
     let setResponse (withTemplate: string -> XmlNode) (page:Page) : HttpHandler =
         fun next ctx ->
-            match ctx.Request.Headers.Inertia with
-            | Some ("true") ->
+            if ctx.Request.IsInertia then
                 ctx.SetHttpHeader("Vary","Accept")
                 ctx.SetHttpHeader("X-Inertia","true")
                 ( page |> json) next ctx
-            | None | Some _ ->
+            else
                 (page.toJson() |> withTemplate |> htmlView) next ctx
 
 
@@ -211,7 +255,7 @@ module Core =
 
     let renderInertia componentName (props:Map<string,obj>) withTemplate assetsVersion url : HttpHandler =
         fun next ctx ->
-            (checkInertiaRequestAndVersion assetsVersion
-                >=> setCsrfCookie
+            (handleCSRF 
+                >=> checkInertiaRequestAndVersion assetsVersion
                 >=> generatePage (setResponse withTemplate) ctx componentName props url assetsVersion)
                 next ctx
