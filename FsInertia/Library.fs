@@ -155,9 +155,38 @@ module Handlers =
             return nonFunctions
         }
         
+    let generatePage (nextHandler: Page -> HttpHandler) ctx componentName (props:Map<string,obj>) (url:string option) version : HttpHandler =
+        fun next ctx -> 
+            task {
+                let! evaluatedProps = handleProps ctx componentName props
+                let page =
+                    {
+                        ``component`` = componentName
+                        props = evaluatedProps
+                        version = version
+                        url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
+                    }
+                return! (nextHandler page) next ctx
+            }
+        
+    let checkRedirect : HttpHandler =
+        fun next ctx -> 
+            if 
+                [HttpMethods.Put ; HttpMethods.Patch; HttpMethods.Delete] |> List.contains ctx.Request.Method && 
+                [ 301; 302] |> List.contains ctx.Response.StatusCode 
+            then
+                ctx.SetStatusCode 303
+            next ctx
+
+    let forceRefresh : HttpHandler =
+        fun next ctx -> 
+            ctx.SetHttpHeader("X-Inertia", "true")
+            ctx.SetHttpHeader("X-Inertia-Location",ctx.Request.GetEncodedUrl())
+            ctx.SetContentType("text/html")
+            next ctx
 
     /// Validate CSRF for both client initiated inertia reqs and full page server reload reqs
-    let handleCSRF : HttpHandler =
+    let handleRequest version : HttpHandler =
         fun next ctx -> 
             task {
                 // check if this request initiates from inertiajs
@@ -168,7 +197,17 @@ module Handlers =
                         // verify they match
                         if token = cookie then
                             // pass through to next handler
-                            return! next ctx
+                            // return! next ctx
+                            if ctx.Request.Method = HttpMethods.Get then
+                                match ctx.Request.Headers.InertiaVersion with
+                                | Some a when a <> version ->
+                                    return! forceRefresh next ctx
+                                | _ -> 
+                                    return! next ctx
+                            else
+                                return! checkRedirect next ctx
+
+
                         else
                             // clear reponse, set 403 status and return early
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
@@ -190,38 +229,8 @@ module Handlers =
                         return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
             }
 
-    let generatePage (nextHandler: Page -> HttpHandler) ctx componentName (props:Map<string,obj>) (url:string option) version : HttpHandler =
-        fun next ctx -> 
-            task {
-                let! evaluatedProps = handleProps ctx componentName props
-                let page =
-                    {
-                        ``component`` = componentName
-                        props = evaluatedProps
-                        version = version
-                        url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
-                    }
-                return! (nextHandler page) next ctx
-            }
-        
 
-    let checkRedirect : HttpHandler =
-        fun next ctx -> 
-            if 
-                [HttpMethods.Put ; HttpMethods.Patch; HttpMethods.Delete] |> List.contains ctx.Request.Method && 
-                [ 301; 302] |> List.contains ctx.Response.StatusCode 
-            then
-                ctx.SetStatusCode 303
-            next ctx
-
-    let forceRefresh : HttpHandler =
-        fun next ctx -> 
-            ctx.SetHttpHeader("X-Inertia", "true")
-            ctx.SetHttpHeader("X-Inertia-Location",ctx.Request.GetEncodedUrl())
-            ctx.SetContentType("text/html")
-            next ctx
-
-    let checkInertiaRequestAndVersion (version:string) : HttpHandler =
+(*    let checkInertiaRequestAndVersion (version:string) : HttpHandler =
         fun next ctx ->
             if ctx.Request.IsInertia && ctx.Request.Method = HttpMethods.Get then 
                 match ctx.Request.Headers.InertiaVersion with
@@ -231,7 +240,7 @@ module Handlers =
             else if ctx.Request.IsInertia then
                 checkRedirect next ctx
             else 
-                next ctx
+                next ctx*)
 
     let setResponse (withTemplate: string -> XmlNode) (page:Page) : HttpHandler =
         fun next ctx ->
@@ -255,7 +264,7 @@ module Core =
 
     let renderInertia componentName (props:Map<string,obj>) withTemplate assetsVersion url : HttpHandler =
         fun next ctx ->
-            (handleCSRF 
-                >=> checkInertiaRequestAndVersion assetsVersion
+            (handleRequest assetsVersion
+                // >=> checkInertiaRequestAndVersion assetsVersion
                 >=> generatePage (setResponse withTemplate) ctx componentName props url assetsVersion)
                 next ctx
