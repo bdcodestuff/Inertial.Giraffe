@@ -339,6 +339,10 @@ module Core =
                 >=> generatePage (setResponse withTemplate) ctx componentName props url assetsVersion)
                 next ctx
 
+type SharedData =
+    | Single of (string * obj)
+    | Map of Map<string,obj>
+
 type MiddleWare () =
     member val RootView = ""
 
@@ -388,8 +392,12 @@ type Inertia (?rootView:string->XmlNode,?version:string) =
     member val Version : string = defaultArg version "1" with get, set
     member x.SetRootView(template:string -> XmlNode) = 
         x.RootView <- Some template
-    member x.Share(shared:Map<string,obj>) =
-        x.SharedProps <- Map.union shared x.SharedProps
+    member x.Share(shared:SharedData) =
+        match shared with
+        | Single (k,v) ->
+            x.SharedProps <- x.SharedProps.Add(k,v)
+        | Map m ->
+            x.SharedProps <- Map.union m x.SharedProps
     member x.GetShared () = x.SharedProps
     member x.FlushShared () = x.SharedProps <- Map.empty<string,obj>
     member x.GetVersion () = x.Version
@@ -447,6 +455,7 @@ type InertiaModal(componentName:string,props:Map<string,obj>,version:string) =
                 if ctx.Request.IsInertia && not x.RefeshBackdrop then
                     return! x.RenderModal () next ctx
                 else
+                    Inertia().Share(Single("modal",x.Component(ctx)))
                     match ctx.Request.Headers.InertiaPartialComponent with
                     | Some partialComponent when ctx.Request.IsInertia ->
                         let inertia = Inertia().Render(partialComponent,Map.empty<string,obj>).ToResponse()
