@@ -10,6 +10,9 @@ open System.Text.Json
 open Giraffe
 open Giraffe.ViewEngine
 
+open FSharpx.Collections
+open FSharp.Reflection
+
 /// Determine if the given header is present
 let private hdr (headers : IHeaderDictionary) hdr =
     match headers[hdr] with it when it = StringValues.Empty -> None | it -> Some it[0]
@@ -36,6 +39,9 @@ type IHeaderDictionary with
     member this.XSRFToken with get () = hdr this "X-XSRF-TOKEN"
 
     // MODAL
+
+    /// Referer
+    member this.TryGetReferer with get () = hdr this "Referer"
 
     /// The modal key header contained in the request
     member this.InertiaModalKey with get () = hdr this "X-Inertia-Modal-Key"
@@ -65,11 +71,36 @@ type Page =
     member x.toJson () =
         JsonSerializer.Serialize<Page>(x)
 
+type ModalComponent = 
+    {
+        ``component`` : string
+        props : Map<string,obj>
+        redirectUrl : string
+        key : string
+    }
+
+type ModalPage =
+    {
+        props : Map<string,obj>
+        version : string
+        url : string
+    }
+
+    member x.toJson () =
+        JsonSerializer.Serialize<ModalPage>(x)
+
+
 module Handlers =
 
-    open FSharpx.Collections
-    open FSharp.Reflection
+
     
+    let mergeWithSharedProps (existingProps:Map<string,obj>) (ctx:HttpContext) =
+            match ctx.Items.TryGetValue("InertiaSharedData") with
+            | (false, _) -> Map.empty<string,obj>
+            | (true, a) ->
+                let sharedProps = try a :?> Map<string,obj> with exn -> failwith exn.Message
+                Map.union existingProps sharedProps
+
     let handleProps (ctx:HttpContext) componentName (props:Map<string,obj>) =
         task {
             // check if partial data request with specified component name
@@ -89,19 +120,11 @@ module Handlers =
             | filter ->
                 props |> Map.filter (fun x y -> Array.contains x filter)
 
-        let props = 
-            match ctx.Items.TryGetValue("InertiaSharedData") with
-            | (false, _) -> filteredProps
-            | (true, a) ->
-                try 
-                    let sharedProps = try a :?> Map<string,obj> with exn -> failwith exn.Message
-                    Map.union filteredProps sharedProps
-                with exn -> failwith exn.Message
+        let props = mergeWithSharedProps filteredProps ctx
         
         let functions, nonFunctions =
             props
             |> Map.partition (fun _ v -> FSharpType.IsFunction(v.GetType()))
-        
         
         if isPartialReq then
             // partition function type props into maps of either async or sync functions based on type signature
@@ -197,17 +220,18 @@ module Handlers =
                         // verify they match
                         if token = cookie then
                             // pass through to next handler
-                            // return! next ctx
+                            // if GET
                             if ctx.Request.Method = HttpMethods.Get then
+                                // check asset version
                                 match ctx.Request.Headers.InertiaVersion with
                                 | Some a when a <> version ->
                                     return! forceRefresh next ctx
+                                // versions match so pass through to response handler
                                 | _ -> 
                                     return! next ctx
+                            // Other method type so check if redirect
                             else
                                 return! checkRedirect next ctx
-
-
                         else
                             // clear reponse, set 403 status and return early
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
@@ -223,24 +247,11 @@ module Handlers =
                         let options = new CookieOptions()
                         options.SameSite <- SameSiteMode.Strict
                         ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
-                        // pass through to hext handler
+                        // pass through to response handler
                         return! next ctx
                     else 
                         return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
             }
-
-
-(*    let checkInertiaRequestAndVersion (version:string) : HttpHandler =
-        fun next ctx ->
-            if ctx.Request.IsInertia && ctx.Request.Method = HttpMethods.Get then 
-                match ctx.Request.Headers.InertiaVersion with
-                | Some a when a <> version ->
-                    forceRefresh next ctx
-                | _ -> next ctx
-            else if ctx.Request.IsInertia then
-                checkRedirect next ctx
-            else 
-                next ctx*)
 
     let setResponse (withTemplate: string -> XmlNode) (page:Page) : HttpHandler =
         fun next ctx ->
@@ -250,6 +261,65 @@ module Handlers =
                 ( page |> json) next ctx
             else
                 (page.toJson() |> withTemplate |> htmlView) next ctx
+
+let redirectUrl baseUrl forceBase (ctx:HttpContext) : string =
+    if forceBase then baseUrl else
+    match ctx.Request.Headers.InertiaModalRedirectUrl with
+    | Some redirectUrl -> redirectUrl
+    | None ->
+        match ctx.Request.Headers.TryGetReferer with
+        | Some referer when ctx.Request.IsInertia ->
+            referer
+        | _ ->
+            baseUrl
+
+let makeModalPage (modal:ModalComponent) version url ctx =
+    let mergedProps = Handlers.mergeWithSharedProps Map.empty<string,obj> ctx
+    let pageProps = mergedProps.Add("modal",modal)
+    {
+        props = pageProps
+        version = version
+        url = url
+    }
+
+let setModalResponse (modalPage:ModalPage) : HttpHandler =
+        fun next ctx ->
+            ctx.SetHttpHeader("X-Inertia-Modal","true")
+            ( modalPage |> json) next ctx
+
+
+let handleModalRequest modalComponentName modalProps refreshBackdrop baseUrl forceBase withTemplate version: HttpHandler =
+    fun next ctx ->
+        task {
+            let! executedProps = Handlers.handleProps ctx modalComponentName modalProps
+            let redirectUrl = redirectUrl baseUrl forceBase ctx
+            // construct the modal component
+            let modalComponent = 
+                {
+                    ``component`` = modalComponentName
+                    props = executedProps
+                    redirectUrl = redirectUrl
+                    key = defaultArg ctx.Request.Headers.InertiaModalKey (Guid.NewGuid().ToString())
+                }
+            
+            if ctx.Request.IsInertia && not refreshBackdrop then
+                // render the modal
+                let modalPage = makeModalPage modalComponent version baseUrl ctx 
+                return! setModalResponse modalPage next ctx
+            else
+                // if not rendering the standard modal
+                // check for partial component header
+                match ctx.Request.Headers.InertiaPartialComponent with
+                | Some partialComponent when ctx.Request.IsInertia ->
+                    // render partialComponent
+                    return! (Handlers.handleRequest version
+                                >=> Handlers.generatePage withTemplate ctx partialComponent Map.empty<string,obj> (Some baseUrl) version)
+                                next ctx
+                | None ->
+                    // redirect to url
+                    return! redirectTo false redirectUrl next ctx
+        
+        }
 
 
 [<AutoOpen>]
@@ -268,3 +338,103 @@ module Core =
                 // >=> checkInertiaRequestAndVersion assetsVersion
                 >=> generatePage (setResponse withTemplate) ctx componentName props url assetsVersion)
                 next ctx
+
+type InertiaResponse (componentName:string,props:Map<string,obj>,?rootView:string,?version:string) =
+    member val ComponentName = componentName
+    member val Props = props with get, set
+    member val RootView = defaultArg rootView "app" with get, set
+    member val Version = defaultArg version "" with get, set
+    member val ViewData = Map.empty<string,obj> with get, set
+    member x.With (props:Map<string,obj>) =
+        x.Props <- Map.union x.Props props
+    member x.WithViewData (data:Map<string,obj>) =
+        x.ViewData <- Map.union x.ViewData data
+    member x.SetRootView (rootView:string) =
+        x.RootView <- rootView
+    member x.ToResponse () : HttpHandler =
+        fun next ctx ->
+            task {
+                let! propResult = Handlers.handleProps ctx x.ComponentName x.Props
+                let page =
+                    {
+                        ``component`` = x.ComponentName
+                        props = propResult
+                        version = x.Version
+                        url = ctx.Request.GetEncodedPathAndQuery()
+                    }
+                ctx.SetHttpHeader("Vary","Accept")
+                ctx.SetHttpHeader("X-Inertia","true")
+                return! json page next ctx
+
+            }
+
+type Inertia () =
+    member val RootView = "app" with get, set
+    member val SharedProps = Map.empty<string,obj> with get, set
+    member val Version : string = "" with get, set
+    member x.SetRootView(name:string) = x.RootView <- name
+    member x.Share(shared:Map<string,obj>) =
+        x.SharedProps <- Map.union shared x.SharedProps
+    member x.GetShared () = x.SharedProps
+    member x.FlushShared () = x.SharedProps <- Map.empty<string,obj>
+    member x.GetVersion () = x.Version
+    member x.SetVersion (version:string) = x.Version <- version
+    member x.Render(componentName:string,props:Map<string,obj>) =
+        let mergedProps = Map.union x.SharedProps props
+        new InertiaResponse(componentName,mergedProps,x.RootView,x.GetVersion())
+
+type InertiaModal(componentName:string,props:Map<string,obj>,version:string) =
+    member val BaseUrl : string = "" with get, set
+    member val RefeshBackdrop : bool = false with get, set
+    member val ForceBase : bool = false with get, set
+    member val Props : Map<string,obj> = props
+    member val ComponentName : string = componentName
+    member val Version : string = version with get, set
+    member x.SetBaseUrl (url:string) = x.BaseUrl <- url
+    member x.SetRefreshBackdrop (set:bool) = x.RefeshBackdrop <- set
+    member x.SetForceBase (set:bool) = x.ForceBase <- set
+
+    member x.RedirectUrl (ctx:HttpContext) =
+        if x.ForceBase then
+            x.BaseUrl
+        else 
+            match ctx.Request.Headers.InertiaModalRedirectUrl, ctx.Request.Headers.TryGetReferer with
+            | Some url, _ -> url
+            | None, Some ref -> ref
+            | _ ->
+                x.BaseUrl
+
+    member x.Component ctx : ModalComponent =
+        {
+            ``component`` = x.ComponentName
+            redirectUrl = x.RedirectUrl(ctx)
+            props = x.Props
+            key = defaultArg ctx.Request.Headers.InertiaModalKey (Guid.NewGuid().ToString())
+        }
+
+    member x.RenderModal () : HttpHandler =
+        fun next ctx ->
+            let mergedProps = Handlers.mergeWithSharedProps Map.empty<string,obj> ctx
+            let modalComponent = x.Component ctx
+            let pageProps = mergedProps.Add("modal",modalComponent)
+            let page =
+                {
+                    props = pageProps
+                    url = ctx.Request.GetEncodedPathAndQuery()
+                    version = x.Version
+                }
+            ctx.Response.Headers.Add("X-Inertial-Modal","true")
+            json page next ctx
+
+    member x.Render () : HttpHandler =
+        fun next ctx ->
+            task {
+                if ctx.Request.IsInertia && not x.RefeshBackdrop then
+                    return! x..RenderModal () next ctx
+                else
+                    match ctx.Request.Headers.InertiaPartialComponent with
+                    | Some partialComponent when ctx.Request.IsInertia ->
+                        // render partial
+                    | _ ->
+                        return! next ctx
+            }
