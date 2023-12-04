@@ -339,17 +339,31 @@ module Core =
                 >=> generatePage (setResponse withTemplate) ctx componentName props url assetsVersion)
                 next ctx
 
-type InertiaResponse (componentName:string,props:Map<string,obj>,?rootView:string,?version:string) =
+type MiddleWare () =
+    member val RootView = ""
+
+type InertiaResponse (componentName:string,props:Map<string,obj>,rootView:(string->XmlNode)option,?version:string) =
+    let defaultRootView dataPage =
+        html [_lang "en"] [
+            head [] [
+                title [] [ str "Index" ]
+                
+            ]
+            body [] [
+                div [_id "app" ; attr "data-page" dataPage ] []
+                script [ _type "text/javascript" ; _src "/js/index.js"] []
+            ]
+        ]
     member val ComponentName = componentName
     member val Props = props with get, set
-    member val RootView = defaultArg rootView "app" with get, set
+    member val RootView = defaultArg rootView defaultRootView with get, set
     member val Version = defaultArg version "" with get, set
     member val ViewData = Map.empty<string,obj> with get, set
     member x.With (props:Map<string,obj>) =
         x.Props <- Map.union x.Props props
     member x.WithViewData (data:Map<string,obj>) =
         x.ViewData <- Map.union x.ViewData data
-    member x.SetRootView (rootView:string) =
+    member x.SetRootView (rootView:string -> XmlNode) =
         x.RootView <- rootView
     member x.ToResponse () : HttpHandler =
         fun next ctx ->
@@ -368,11 +382,12 @@ type InertiaResponse (componentName:string,props:Map<string,obj>,?rootView:strin
 
             }
 
-type Inertia () =
-    member val RootView = "app" with get, set
+type Inertia (?rootView:string->XmlNode,?version:string) =
+    member val RootView = rootView with get, set
     member val SharedProps = Map.empty<string,obj> with get, set
-    member val Version : string = "" with get, set
-    member x.SetRootView(name:string) = x.RootView <- name
+    member val Version : string = defaultArg version "1" with get, set
+    member x.SetRootView(template:string -> XmlNode) = 
+        x.RootView <- Some template
     member x.Share(shared:Map<string,obj>) =
         x.SharedProps <- Map.union shared x.SharedProps
     member x.GetShared () = x.SharedProps
@@ -381,7 +396,7 @@ type Inertia () =
     member x.SetVersion (version:string) = x.Version <- version
     member x.Render(componentName:string,props:Map<string,obj>) =
         let mergedProps = Map.union x.SharedProps props
-        new InertiaResponse(componentName,mergedProps,x.RootView,x.GetVersion())
+        new InertiaResponse(componentName,mergedProps,rootView=x.RootView,version=x.GetVersion())
 
 type InertiaModal(componentName:string,props:Map<string,obj>,version:string) =
     member val BaseUrl : string = "" with get, set
@@ -430,11 +445,12 @@ type InertiaModal(componentName:string,props:Map<string,obj>,version:string) =
         fun next ctx ->
             task {
                 if ctx.Request.IsInertia && not x.RefeshBackdrop then
-                    return! x..RenderModal () next ctx
+                    return! x.RenderModal () next ctx
                 else
                     match ctx.Request.Headers.InertiaPartialComponent with
                     | Some partialComponent when ctx.Request.IsInertia ->
-                        // render partial
+                        let inertia = Inertia().Render(partialComponent,Map.empty<string,obj>).ToResponse()
+                        return! inertia next ctx
                     | _ ->
-                        return! next ctx
+                        return! redirectTo false (x.RedirectUrl ctx) next ctx
             }
