@@ -3,7 +3,6 @@
 open System
 open System.Threading.Tasks
 open System.Text.Json
-open System.Runtime.InteropServices
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Http.Extensions
 open Microsoft.AspNetCore.Antiforgery
