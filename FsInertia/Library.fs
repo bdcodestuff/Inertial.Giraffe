@@ -156,6 +156,7 @@ type ModalComponent =
         props : Map<string,obj>
         redirectUrl : string
         key : string
+        nonce : string
     }
 
 type ModalPage =
@@ -341,6 +342,7 @@ module Core =
                 redirectUrl = x.RedirectUrl(ctx)
                 props = x.Props
                 key = defaultArg ctx.Request.Headers.InertiaModalKey (Guid.NewGuid().ToString())
+                nonce = System.Guid.NewGuid().ToString()
             }
         member x.PageObject ctx =
             let modalComponent = x.Component ctx
@@ -370,7 +372,8 @@ module Core =
                             let inertia = inertia.Render(partialComponent).Handler()
                             return! inertia next ctx
                         | _ ->
-                            let response = inertia.Render(x.BaseComponentName).With(Map <| x.BaseProps.Add("modal",x.Component ctx)).Handler()
+                            let baseProps = x.BaseProps.Add("modal",x.Component ctx)
+                            let response = inertia.Render(x.BaseComponentName).With(Map baseProps).Handler()
                             return! response next ctx
                 }
 
