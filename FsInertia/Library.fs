@@ -40,24 +40,12 @@ type IHeaderDictionary with
     /// Get the token from request set by axios when XSRF-COOKIE is present
     member this.XSRFToken with get () = hdr this "X-XSRF-TOKEN"
 
-    // MODAL
-
-    /// Referer
+    /// Get the referer
     member this.TryGetReferer with get () = hdr this "Referer"
 
-    /// The modal key header contained in the request
-    member this.InertiaModalKey with get () = hdr this "X-Inertia-Modal-Key"
-
-    /// The modal redirect url in the request
-    member this.InertiaModalRedirectUrl with get () = hdr this "X-Inertia-Modal-Redirect"
 
 /// Extensions for the request object
 type HttpRequest with
-
-    /// If X-Inertia-Modal-Key header is present then return the key otherwise create a new guid key
-    member this.getInertiaModalKey with get () = 
-        this.Headers.InertiaModalKey 
-        |> Option.defaultValue (Guid.NewGuid().ToString())
 
     /// Check whether this request was initiated from Inertia
     member this.IsInertia with get () = this.Headers.Inertia |> Option.defaultValue false
@@ -150,29 +138,6 @@ type Page =
     member x.toJson () =
         JsonSerializer.Serialize<Page>(x)
 
-type ModalComponent = 
-    {
-        ``component`` : string
-        props : Map<string,obj>
-        redirectUrl : string
-        key : string
-        nonce : string
-    }
-
-type ModalPage =
-    {
-        props : Map<string,obj>
-        version : string
-        url : string
-    }
-
-    member x.toJson () =
-        JsonSerializer.Serialize<ModalPage>(x)
-
-type SharedData =
-    | Single of (string * obj)
-    | Map of Map<string,obj>
-
 [<AutoOpen>]
 module Core =
 
@@ -194,14 +159,13 @@ module Core =
         member x.SetRootView(templateFn:string -> XmlNode) = 
             x.RootView <- templateFn
             x
-        member x.Share(shared:SharedData) =
-            match shared with
-            | Single (k,v) ->
-                x.SharedProps <- x.SharedProps.Add(k,v)
-            | Map m ->
-                x.SharedProps <- Map.union x.SharedProps m
+        member x.ShareProp(k:string,v:obj) =
+            x.SharedProps <- x.SharedProps.Add(k,v)
             x
-        member x.UnShare(key:string) =
+        member x.SharePropMap(map:Map<string,obj>) =
+            x.SharedProps <- Map.union x.SharedProps map
+            x
+        member x.Unshare(key:string) =
             x.SharedProps <- x.SharedProps.Remove(key)
             x
         member x.GetShared () = 
@@ -214,40 +178,35 @@ module Core =
         member x.SetVersion (version:string) = 
             x.Version <- version
             x
-        member x.Render(componentName:string) =
+        member x.Component(componentName:string) =
             // send shared props to response
-            new InertiaResponse(componentName,x.GetShared(),rootView=x.RootView,version=x.GetVersion())
+            new InertiaResponse(componentName,x.GetShared(),rootView=x.RootView)
           
-    and InertiaResponse (componentName:string,sharedProps:Map<string,obj>,rootView:(string->XmlNode),version:string) =        
+    and InertiaResponse (componentName:string,sharedProps:Map<string,obj>,rootView:(string->XmlNode)) =        
         member val ComponentName = componentName
         member val Props = sharedProps with get, set
         member val RootView = rootView with get, set
-        member val Version = version with get, set
         member val ViewData = Map.empty<string,obj> with get, set
-        member x.With (newProps:SharedData) =
-            match newProps with
-            | Single (k,v) -> x.Props <- x.Props.Add(k,v)
-            | Map m -> x.Props <- Map.union x.Props m
+        member x.WithProp(k:string,v:obj) =
+            x.Props <- x.Props.Add(k,v)
+            x
+        member x.WithPropMap (map:Map<string,obj>) =
+            x.Props <- Map.union x.Props map
             x
         member x.WithViewData (data:Map<string,obj>) =
             x.ViewData <- Map.union x.ViewData data
             x
-
-         member x.RenderModal(modalComponentName:string,baseComponentHandler:HttpHandler,baseUrl:string) =
-            
-            new InertiaModalResponse(modalComponentName,x.ComponentName,x.Props,x.Version,baseComponentHandler,baseUrl)
-
-
-        member x.Handler () : HttpHandler =
+        member x.Render (?url:string,?version:string) : HttpHandler =
             fun next ctx ->
                 task {
+                    let v = defaultArg version "1"
                     let! propResult = evaluateProps ctx x.ComponentName x.Props
                     let page =
                         {
                             ``component`` = x.ComponentName
                             props = propResult
-                            version = x.Version
-                            url = ctx.Request.GetEncodedPathAndQuery()
+                            version = v
+                            url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
                         }
                     
                     // check if this request initiates from inertiajs
@@ -262,7 +221,7 @@ module Core =
                                 if ctx.Request.Method = HttpMethods.Get then
                                     // check asset version
                                     match ctx.Request.Headers.InertiaVersion with
-                                    | Some a when a <> x.Version ->
+                                    | Some a when a <> v ->
                                         // version mismatch, force a full refresh
                                         ctx.SetHttpHeader("X-Inertia","true")
                                         ctx.SetHttpHeader("X-Inertia-Location",ctx.Request.GetEncodedUrl())
@@ -300,81 +259,6 @@ module Core =
                             return! (page.toJson() |> x.RootView |> htmlView) next ctx
                         else 
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
-                }
-
-    and InertiaModalResponse(modalComponentName:string,baseComponentName:string,baseProps:Map<string,obj>,version:string,baseComponentHandler:HttpHandler,baseUrl) =
-        member val BaseUrl : string = baseUrl with get, set
-        member val RefeshBackdrop : bool = false with get, set
-        member val ForceBase : bool = false with get, set
-        member val Props : Map<string,obj> = Map.empty<string,obj> with get, set
-        member val BaseProps : Map<string,obj> = baseProps with get, set
-        member val ModalComponentName : string = modalComponentName
-        member val BaseComponentName : string = baseComponentName
-        member val BaseComponentHandler : HttpHandler = baseComponentHandler with get, set 
-        member val Version : string = version with get, set
-        member x.With (newProps:SharedData) =
-            match newProps with
-            | Single (k,v) -> x.Props <- x.Props.Add(k,v)
-            | Map m -> x.Props <- Map.union x.Props m
-            x
-        member x.SetBaseUrl (url:string) = 
-            x.BaseUrl <- url
-            x
-        member x.SetRefreshBackdrop (set:bool) = 
-            x.RefeshBackdrop <- set
-            x
-        member x.SetForceBase (set:bool) = 
-            x.ForceBase <- set
-            x
-        member x.RedirectUrl (ctx:HttpContext) =
-            if x.ForceBase then
-                x.BaseUrl
-            else 
-                match ctx.Request.Headers.InertiaModalRedirectUrl, ctx.Request.Headers.TryGetReferer with
-                | Some url, _ -> url
-                | None, Some ref -> ref
-                | _ ->
-                    x.BaseUrl
-
-        member x.Component ctx : ModalComponent =
-            {
-                ``component`` = x.ModalComponentName
-                redirectUrl = x.RedirectUrl(ctx)
-                props = x.Props
-                key = defaultArg ctx.Request.Headers.InertiaModalKey (Guid.NewGuid().ToString())
-                nonce = System.Guid.NewGuid().ToString()
-            }
-        member x.PageObject ctx =
-            let modalComponent = x.Component ctx
-            let pageProps = x.BaseProps.Add("modal",modalComponent)
-            {
-                props = pageProps
-                url = ctx.Request.GetEncodedPathAndQuery()
-                version = x.Version
-            }
-        member x.RenderModal () : HttpHandler =
-            fun next ctx ->
-                
-                ctx.SetHttpHeader("X-Inertia","true")
-                ctx.SetHttpHeader("X-Inertial-Modal","true")
-                json (x.PageObject ctx) next ctx
-
-        member x.Handler () : HttpHandler =
-            fun next ctx ->
-                task {
-                    if ctx.Request.IsInertia && not x.RefeshBackdrop then
-                        return! x.RenderModal () next ctx
-                    else
-                        let inertia = ctx.GetService<Inertia>()
-                        //inertia.UnShare("modal").Share(Single("modal",x.Component(ctx))) |> ignore
-                        match ctx.Request.Headers.InertiaPartialComponent with
-                        | Some partialComponent when ctx.Request.IsInertia ->
-                            let inertia = inertia.Render(partialComponent).Handler()
-                            return! inertia next ctx
-                        | _ ->
-                            let baseProps = x.BaseProps.Add("modal",x.Component ctx)
-                            let response = inertia.Render(x.BaseComponentName).With(Map baseProps).Handler()
-                            return! response next ctx
                 }
 
     [<Extension>]
