@@ -146,7 +146,7 @@ type Page =
 [<AutoOpen>]
 module Core =
 
-    type Inertia (?rootView:string -> XmlNode) =
+    type Inertia (?sharePropHandler:HttpHandler,?rootView:string -> XmlNode) =
         let defaultRootView dataPage =
             html [_lang "en"] [
                 head [] [
@@ -158,26 +158,35 @@ module Core =
                     script [ _type "text/javascript" ; _src "/js/index.js"] []
                 ]
             ]
+        let defaultSharedPropHandler () : HttpHandler =
+            fun next ctx -> next ctx
+        member val SharedPropHandler = defaultArg sharePropHandler (defaultSharedPropHandler ()) with get, set
         member val RootView = defaultArg rootView defaultRootView with get, set
         member val SharedProps = Map.empty<string,obj> with get, set
         member val Version : string = "1" with get, set
+        
+        member x.SharePropsHandler () = 
+            fun next ctx ->
+                task {
+                    x.FlushShared()
+                    return! x.SharedPropHandler next ctx
+                }
+        
         member x.SetRootView(templateFn:string -> XmlNode) = 
             x.RootView <- templateFn
             x
+
         member x.ShareProp(k:string,v:obj) =
             x.SharedProps <- x.SharedProps.Add(k,v)
-            x
         member x.SharePropMap(map:Map<string,obj>) =
             x.SharedProps <- Map.union x.SharedProps map
-            x
         member x.Unshare(key:string) =
             x.SharedProps <- x.SharedProps.Remove(key)
-            x
         member x.GetShared () = 
             x.SharedProps
         member x.FlushShared () = 
             x.SharedProps <- Map.empty<string,obj>
-            x
+
         member x.GetVersion () = 
             x.Version
         member x.SetVersion (version:string) = 
@@ -185,10 +194,11 @@ module Core =
             x
         member x.Component(componentName:string) =
             // send shared props to response
-            new InertiaResponse(componentName,x.GetShared(),rootView=x.RootView)
+            new InertiaResponse(componentName,x.SharePropsHandler(),x.GetShared(),rootView=x.RootView)
           
-    and InertiaResponse (componentName:string,sharedProps:Map<string,obj>,rootView:(string->XmlNode)) =        
+    and InertiaResponse (componentName:string,sharedPropsHandler:HttpHandler,sharedProps:Map<string,obj>,rootView:(string->XmlNode)) =        
         member val ComponentName = componentName
+        member val SharePropsHandler = sharedPropsHandler with get, set
         member val Props = sharedProps with get, set
         member val RootView = rootView with get, set
         member val ViewData = Map.empty<string,obj> with get, set
@@ -201,7 +211,7 @@ module Core =
         member x.WithViewData (data:Map<string,obj>) =
             x.ViewData <- Map.union x.ViewData data
             x
-        member x.Render (?url:string,?version:string) : HttpHandler =
+        member x.ResponseHandler (?url:string,?version:string) : HttpHandler =
             fun next ctx ->
                 task {
                     let v = defaultArg version "1"
@@ -271,6 +281,8 @@ module Core =
                         else 
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
                 }
+        member x.Render () =
+            x.SharePropsHandler >=> x.ResponseHandler()
 
     [<Extension>]
     type ServiceCollectionExtensions() =
@@ -281,6 +293,6 @@ module Core =
         /// </summary>
         /// <returns>Returns an <see cref="Microsoft.Extensions.DependencyInjection.IServiceCollection"/> builder object.</returns>
         [<Extension>]
-        static member AddInertia(svc : IServiceCollection) =
-            svc.TryAddSingleton<Inertia>(fun _ -> Inertia())
+        static member AddInertia(svc : IServiceCollection, sharePropHandler : HttpHandler) =
+            svc.TryAddSingleton<Inertia>(fun _ -> Inertia(sharePropHandler))
             svc
