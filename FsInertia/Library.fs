@@ -126,6 +126,11 @@ let private evaluateProps (ctx:HttpContext) (componentName:string) (props:Map<st
             return nonFunctions
     }
 
+type FlashType =
+    | Success
+    | Info
+    | Error'
+    | Warning
 
 type Page =
     {
@@ -234,12 +239,18 @@ module Core =
                                         return! json page next ctx
                                 // Other method type so check if redirect
                                 else
-                                    if 
-                                        [HttpMethods.Put ; HttpMethods.Patch; HttpMethods.Delete] |> List.contains ctx.Request.Method && 
-                                        [ 301; 302] |> List.contains ctx.Response.StatusCode 
+                                    if
+                                        [ HttpMethods.Put ; HttpMethods.Patch; HttpMethods.Delete ] 
+                                            |> List.contains ctx.Request.Method && 
+                                        [ StatusCodes.Status301MovedPermanently; StatusCodes.Status302Found ] |> List.contains ctx.Response.StatusCode 
                                     then
-                                        ctx.SetStatusCode 303
-                                    return! next ctx
+                                        ctx.SetStatusCode StatusCodes.Status303SeeOther
+                                        return! next ctx
+                                    else
+                                        // Post or Put Patch Delete without redirect
+                                        ctx.SetHttpHeader("X-Inertia","true")
+                                        ctx.SetHttpHeader("Vary","accept")
+                                        return! json page next ctx
                             else
                                 // clear reponse, set 403 status and return early
                                 return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
