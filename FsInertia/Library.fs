@@ -201,15 +201,11 @@ module Core =
         member val SharePropsHandler = sharedPropsHandler with get, set
         member val Props = sharedProps with get, set
         member val RootView = rootView with get, set
-        member val ViewData = Map.empty<string,obj> with get, set
         member x.WithProp(k:string,v:obj) =
             x.Props <- x.Props.Add(k,v)
             x
         member x.WithPropMap (map:Map<string,obj>) =
             x.Props <- Map.union x.Props map
-            x
-        member x.WithViewData (data:Map<string,obj>) =
-            x.ViewData <- Map.union x.ViewData data
             x
         member x.ResponseHandler (?url:string,?version:string) : HttpHandler =
             fun next ctx ->
