@@ -132,6 +132,12 @@ type FlashType =
     | Error'
     | Warning
 
+type Flash = 
+    {
+        msg : string
+        flashType : FlashType
+    }
+
 type Page =
     {
         ``component`` : string
@@ -168,7 +174,7 @@ module Core =
         member x.SharePropsHandler () = 
             fun next ctx ->
                 task {
-                    x.FlushShared()
+                    x.FlushShared() |> ignore
                     return! x.SharedPropHandler next ctx
                 }
         
@@ -178,15 +184,18 @@ module Core =
 
         member x.ShareProp(k:string,v:obj) =
             x.SharedProps <- x.SharedProps.Add(k,v)
+            x
         member x.SharePropMap(map:Map<string,obj>) =
             x.SharedProps <- Map.union x.SharedProps map
+            x
         member x.Unshare(key:string) =
             x.SharedProps <- x.SharedProps.Remove(key)
+            x
         member x.GetShared () = 
             x.SharedProps
         member x.FlushShared () = 
             x.SharedProps <- Map.empty<string,obj>
-
+            x
         member x.GetVersion () = 
             x.Version
         member x.SetVersion (version:string) = 
@@ -277,8 +286,16 @@ module Core =
                         else 
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
                 }
-        member x.Render () =
-            x.SharePropsHandler >=> x.ResponseHandler()
+        member x.Render (?url:string,?version:string) =
+            match url, version with
+            | Some url, Some version ->
+                x.SharePropsHandler >=> x.ResponseHandler(url=url, version=version)
+            | Some url, None ->
+                x.SharePropsHandler >=> x.ResponseHandler(url=url)
+            | None, Some version ->
+                x.SharePropsHandler >=> x.ResponseHandler(version=version)
+            | _ ->
+                x.SharePropsHandler >=> x.ResponseHandler()
 
     [<Extension>]
     type ServiceCollectionExtensions() =
