@@ -312,13 +312,20 @@ module Core =
                         else 
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
                 }
-        member x.Render (?url:string,?version:string) =
-            match url, version with
-            | Some url, Some version ->
+        member x.Render (?url:string,?version:string,?skipShared:bool) =
+            match url, version, skipShared with
+            | Some url, Some version, Some true ->
+                warbler (fun _ -> x.ResponseHandler(url=url, version=version))
+            | Some url, None, Some true ->
+                warbler (fun _ -> x.ResponseHandler(url=url))
+            | None, Some version, Some true ->
+                warbler (fun _ -> x.ResponseHandler(version=version))
+
+            | Some url, Some version, _ ->
                 warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler(url=url, version=version))
-            | Some url, None ->
+            | Some url, None, _ ->
                 warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler(url=url))
-            | None, Some version ->
+            | None, Some version, _ ->
                 warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler(version=version))
             | _ ->
                 warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler())
