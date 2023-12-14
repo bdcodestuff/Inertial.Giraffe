@@ -2,7 +2,8 @@
 
 open System
 open System.Threading.Tasks
-open System.Text.Json
+open Newtonsoft.Json
+open Microsoft.FSharpLu.Json
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Http.Extensions
 open Microsoft.AspNetCore.Antiforgery
@@ -14,6 +15,10 @@ open Giraffe
 open Giraffe.ViewEngine
 open FSharpx.Collections
 open FSharp.Reflection
+
+// JSON
+let Formatting = Compact.CamelCaseNoFormatting.CompactCamelCaseNoFormattingSettings.formatting
+let Settings = Compact.CamelCaseNoFormatting.CompactCamelCaseNoFormattingSettings.settings
 
 /// Determine if the given header is present
 let private hdr (headers : IHeaderDictionary) hdr =
@@ -147,7 +152,7 @@ type Page =
     }
 
     member x.toJson () =
-        JsonSerializer.Serialize<Page>(x)
+        JsonConvert.SerializeObject(x, Formatting, Settings)
 
 [<AutoOpen>]
 module Core =
@@ -164,14 +169,17 @@ module Core =
                     script [ _type "text/javascript" ; _src "/js/index.js"] []
                 ]
             ]
+        // default shared handler does nothing
         let defaultSharedPropHandler () : HttpHandler =
             fun next ctx -> next ctx
+        
         member val SharedPropHandler = defaultArg sharePropHandler (defaultSharedPropHandler ()) with get, set
         member val RootView = defaultArg rootView defaultRootView with get, set
         member val SharedProps = Map.empty<string,obj> with get, set
         member val Version : string = "1" with get, set
         
-        member x.SharePropsHandler () = 
+
+        member private x.SharePropsHandler () = 
             fun next ctx ->
                 task {
                     x.FlushShared() |> ignore
@@ -201,6 +209,12 @@ module Core =
         member x.SetVersion (version:string) = 
             x.Version <- version
             x
+        member _.Location(url:string) : HttpHandler =
+            fun next ctx ->
+                ctx.SetHttpHeader("X-Inertia","true")
+                ctx.SetHttpHeader("X-Inertia-Location",url)
+                ctx.SetContentType("text/html")
+                redirectTo false url next ctx
         member x.Component(componentName:string) =
             // send shared props to response
             new InertiaResponse(componentName,x.SharePropsHandler(),x.GetShared(),rootView=x.RootView)
@@ -216,17 +230,38 @@ module Core =
         member x.WithPropMap (map:Map<string,obj>) =
             x.Props <- Map.union x.Props map
             x
+
+        member _.ReturnJsonPage (page:Page) : HttpHandler =
+            fun next ctx ->
+                task {
+                    ctx.SetHttpHeader("X-Inertia","true")
+                    ctx.SetHttpHeader("Vary","accept")
+                    return! json page next ctx
+                }
+
+        member _.ForceRefresh (url) : HttpHandler =
+            fun next ctx ->
+                task {
+                    ctx.SetHttpHeader("X-Inertia","true")
+                    ctx.SetHttpHeader("X-Inertia-Location",url)
+                    ctx.SetContentType("text/html")
+                    ctx.SetStatusCode StatusCodes.Status409Conflict
+                    return! next ctx
+                }
+                
+
         member x.ResponseHandler (?url:string,?version:string) : HttpHandler =
             fun next ctx ->
                 task {
                     let v = defaultArg version "1"
+                    let url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
                     let! propResult = evaluateProps ctx x.ComponentName x.Props
                     let page =
                         {
                             ``component`` = x.ComponentName
                             props = propResult
                             version = v
-                            url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
+                            url = url
                         }
                     
                     // check if this request initiates from inertiajs
@@ -242,16 +277,10 @@ module Core =
                                     // check asset version
                                     match ctx.Request.Headers.InertiaVersion with
                                     | Some a when a <> v ->
-                                        // version mismatch, force a full refresh
-                                        ctx.SetHttpHeader("X-Inertia","true")
-                                        ctx.SetHttpHeader("X-Inertia-Location",ctx.Request.GetEncodedUrl())
-                                        ctx.SetContentType("text/html")
-                                        return! setStatusCode StatusCodes.Status409Conflict next ctx
+                                        return! x.ForceRefresh(url) next ctx
                                     // versions match so pass through to json response
                                     | _ -> 
-                                        ctx.SetHttpHeader("X-Inertia","true")
-                                        ctx.SetHttpHeader("Vary","accept")
-                                        return! json page next ctx
+                                        return! x.ReturnJsonPage page next ctx
                                 // Other method type so check if redirect
                                 else
                                     if
@@ -262,10 +291,7 @@ module Core =
                                         ctx.SetStatusCode StatusCodes.Status303SeeOther
                                         return! next ctx
                                     else
-                                        // Post or Put Patch Delete without redirect
-                                        ctx.SetHttpHeader("X-Inertia","true")
-                                        ctx.SetHttpHeader("Vary","accept")
-                                        return! json page next ctx
+                                        return! x.ReturnJsonPage page next ctx
                             else
                                 // clear reponse, set 403 status and return early
                                 return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
@@ -281,7 +307,7 @@ module Core =
                             let options = new CookieOptions()
                             options.SameSite <- SameSiteMode.Strict
                             ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
-                            // pass through to full page handler
+                            // pass through json as string to body data-page tag in full page handler
                             return! (page.toJson() |> x.RootView |> htmlView) next ctx
                         else 
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
@@ -289,13 +315,13 @@ module Core =
         member x.Render (?url:string,?version:string) =
             match url, version with
             | Some url, Some version ->
-                x.SharePropsHandler >=> x.ResponseHandler(url=url, version=version)
+                warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler(url=url, version=version))
             | Some url, None ->
-                x.SharePropsHandler >=> x.ResponseHandler(url=url)
+                warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler(url=url))
             | None, Some version ->
-                x.SharePropsHandler >=> x.ResponseHandler(version=version)
+                warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler(version=version))
             | _ ->
-                x.SharePropsHandler >=> x.ResponseHandler()
+                warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler())
 
     [<Extension>]
     type ServiceCollectionExtensions() =
