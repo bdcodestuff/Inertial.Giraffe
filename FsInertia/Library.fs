@@ -326,9 +326,7 @@ module Core =
     [<Extension>]
     type ServiceCollectionExtensions() =
         /// <summary>
-        /// Adds default Giraffe services to the ASP.NET Core service container.
-        ///
-        /// The default services include features like <see cref="Json.ISerializer"/>, <see cref="Xml.ISerializer"/>, <see cref="INegotiationConfig"/> or more. Please check the official Giraffe documentation for an up to date list of configurable services.
+        /// Adds default Inertia service to the ASP.NET Core service container.
         /// </summary>
         /// <returns>Returns an <see cref="Microsoft.Extensions.DependencyInjection.IServiceCollection"/> builder object.</returns>
         [<Extension>]
