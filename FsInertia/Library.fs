@@ -131,18 +131,6 @@ let private evaluateProps (ctx:HttpContext) (componentName:string) (props:Map<st
             return nonFunctions
     }
 
-type FlashType =
-    | Success
-    | Info
-    | Error'
-    | Warning
-
-type Flash = 
-    {
-        msg : string
-        flashType : FlashType
-    }
-
 type Page =
     {
         ``component`` : string
@@ -159,13 +147,13 @@ module Core =
 
     type Inertia (?sharePropHandler:HttpHandler,?rootView:string -> XmlNode) =
         let defaultRootView dataPage =
-            html [_lang "en"] [
+            html [_lang "en" ; _style "height: 100vh;"] [
                 head [] [
                     title [] [ str "Index" ]
-                
+                    link [ _rel "stylesheet" ; _href "/js/style.css" ]
                 ]
-                body [] [
-                    div [_id "app" ; attr "data-page" dataPage ] []
+                body [ _style "height: 100%;" ] [
+                    div [_id "app" ; _style "height: 100%;" ; attr "data-page" dataPage ] []
                     script [ _type "text/javascript" ; _src "/js/index.js"] []
                 ]
             ]
@@ -211,10 +199,11 @@ module Core =
             x
         member _.Location(url:string) : HttpHandler =
             fun next ctx ->
-                ctx.SetHttpHeader("X-Inertia","true")
                 ctx.SetHttpHeader("X-Inertia-Location",url)
                 ctx.SetContentType("text/html")
-                redirectTo false url next ctx
+                ctx.SetStatusCode StatusCodes.Status409Conflict
+                next ctx
+
         member x.Component(componentName:string) =
             // send shared props to response
             new InertiaResponse(componentName,x.SharePropsHandler(),x.GetShared(),rootView=x.RootView)
@@ -242,7 +231,6 @@ module Core =
         member _.ForceRefresh (url) : HttpHandler =
             fun next ctx ->
                 task {
-                    ctx.SetHttpHeader("X-Inertia","true")
                     ctx.SetHttpHeader("X-Inertia-Location",url)
                     ctx.SetContentType("text/html")
                     ctx.SetStatusCode StatusCodes.Status409Conflict
