@@ -73,7 +73,7 @@ let private evaluateProps (ctx:HttpContext) (componentName:string) (props:Map<st
             match filter with
             | [||] -> props
             | filter ->
-                props |> Map.filter (fun x y -> Array.contains x filter)
+                props |> Map.filter (fun x _ -> Array.contains x filter)
         
         let functions, nonFunctions =
             filteredProps
@@ -87,7 +87,7 @@ let private evaluateProps (ctx:HttpContext) (componentName:string) (props:Map<st
                     match v with
                     | :? (unit -> Task<obj>) -> true
                     | :? (unit -> Async<obj>) -> true
-                    | b -> false
+                    | _ -> false
                 )
             
             // convert tasks to async values, separate keys and values
@@ -206,9 +206,9 @@ module Core =
 
         member x.Component(componentName:string) =
             // send shared props to response
-            new InertiaResponse(componentName,x.SharePropsHandler(),x.GetShared(),rootView=x.RootView)
+            InertiaResponse(componentName,x.SharePropsHandler(),x.GetShared(),rootView=x.RootView)
           
-    and InertiaResponse (componentName:string,sharedPropsHandler:HttpHandler,sharedProps:Map<string,obj>,rootView:(string->XmlNode)) =        
+    and InertiaResponse (componentName:string,sharedPropsHandler:HttpHandler,sharedProps:Map<string,obj>,rootView:string->XmlNode) =        
         member val ComponentName = componentName
         member val SharePropsHandler = sharedPropsHandler with get, set
         member val Props = sharedProps with get, set
@@ -228,7 +228,7 @@ module Core =
                     return! json page next ctx
                 }
 
-        member _.ForceRefresh (url) : HttpHandler =
+        member _.ForceRefresh url : HttpHandler =
             fun next ctx ->
                 task {
                     ctx.SetHttpHeader("X-Inertia-Location",url)
@@ -292,7 +292,7 @@ module Core =
                         if isValidServerCSRF then
                             // if we have valid CSRF tokens (cookies and headers match) then set CSRF token cookie for client calls to mirror back via header
                             let tokenSet = ctx.GetService<IAntiforgery>().GetTokens(ctx)
-                            let options = new CookieOptions()
+                            let options = CookieOptions()
                             options.SameSite <- SameSiteMode.Strict
                             ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
                             // pass through json as string to body data-page tag in full page handler
@@ -318,7 +318,6 @@ module Core =
             | _ ->
                 warbler (fun _ -> x.SharePropsHandler >=> x.ResponseHandler())
 
-    [<Extension>]
     type ServiceCollectionExtensions() =
         /// <summary>
         /// Adds default Inertia service to the ASP.NET Core service container.
