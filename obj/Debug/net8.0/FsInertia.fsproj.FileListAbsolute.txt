@@ -1,0 +1,14 @@
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/FsInertia.fsproj.AssemblyReference.cache
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/FsInertia.AssemblyInfoInputs.cache
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/FsInertia.AssemblyInfo.fs
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/FsInertia.fsproj.CoreCompileInputs.cache
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/FsInertia.sourcelink.json
+/Users/bdmacrie/Projects/FsInertia/FsInertia/bin/Debug/net8.0/Inertial.Giraffe.deps.json
+/Users/bdmacrie/Projects/FsInertia/FsInertia/bin/Debug/net8.0/Inertial.Giraffe.dll
+/Users/bdmacrie/Projects/FsInertia/FsInertia/bin/Debug/net8.0/Inertial.Giraffe.pdb
+/Users/bdmacrie/Projects/FsInertia/FsInertia/bin/Debug/net8.0/Inertial.Giraffe.xml
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/Inertial.Giraffe.dll
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/refint/Inertial.Giraffe.dll
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/Inertial.Giraffe.xml
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/Inertial.Giraffe.pdb
+/Users/bdmacrie/Projects/FsInertia/FsInertia/obj/Debug/net8.0/ref/Inertial.Giraffe.dll

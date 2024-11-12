@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<doc>
+<assembly><name>Inertial.Giraffe</name></assembly>
+<members>
+<member name="M:Inertial.Giraffe.HttpRequest.get_IsInertia(Microsoft.AspNetCore.Http.HttpRequest)">
+<summary>
+ Check whether this request was initiated from Inertia
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.IHeaderDictionary.get_TryGetReferer(Microsoft.AspNetCore.Http.IHeaderDictionary)">
+<summary>
+ Get the referer
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.IHeaderDictionary.get_XSRFToken(Microsoft.AspNetCore.Http.IHeaderDictionary)">
+<summary>
+ Get the token from request set by axios when XSRF-COOKIE is present
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.IHeaderDictionary.get_InertiaPartialComponent(Microsoft.AspNetCore.Http.IHeaderDictionary)">
+<summary>
+ Inertia Partial Component
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.IHeaderDictionary.get_InertiaPartialData(Microsoft.AspNetCore.Http.IHeaderDictionary)">
+<summary>
+ Inertia Partial Data
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.IHeaderDictionary.get_InertiaLocation(Microsoft.AspNetCore.Http.IHeaderDictionary)">
+<summary>
+ Inertia Location
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.IHeaderDictionary.get_InertiaVersion(Microsoft.AspNetCore.Http.IHeaderDictionary)">
+<summary>
+ Inertia Version
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.IHeaderDictionary.get_Inertia(Microsoft.AspNetCore.Http.IHeaderDictionary)">
+<summary>
+ Inertia Request
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.funString``1(``0)">
+<summary>
+ Helper to print prop function signature
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.hdr(Microsoft.AspNetCore.Http.IHeaderDictionary,System.String)">
+<summary>
+ Determine if the given header is present
+</summary>
+</member>
+<member name="M:Inertial.Giraffe.Core.ServiceCollectionExtensions.AddInertia``2(Microsoft.Extensions.DependencyInjection.IServiceCollection,Microsoft.FSharp.Core.FSharpFunc{Microsoft.FSharp.Core.FSharpFunc{Microsoft.AspNetCore.Http.HttpContext,System.Threading.Tasks.Task{Microsoft.FSharp.Core.FSharpOption{Microsoft.AspNetCore.Http.HttpContext}}},Microsoft.FSharp.Core.FSharpFunc{Microsoft.AspNetCore.Http.HttpContext,System.Threading.Tasks.Task{Microsoft.FSharp.Core.FSharpOption{Microsoft.AspNetCore.Http.HttpContext}}}},System.String,System.String,Microsoft.FSharp.Core.FSharpFunc{``0,System.Tuple{System.String,Microsoft.FSharp.Core.FSharpFunc{Microsoft.FSharp.Core.FSharpOption{``0},Microsoft.FSharp.Core.FSharpFunc{System.Boolean,Microsoft.FSharp.Core.FSharpFunc{System.String[],Microsoft.FSharp.Control.FSharpAsync{Microsoft.FSharp.Core.FSharpOption{``0}}}}}}},``1)">
+ <summary>
+ Adds default Inertia service to the ASP.NET Core service container.
+ A Props union type of individual page data and a Shared record type must be supplied at instantiation
+ </summary>
+ <returns>Returns an <see cref="Microsoft.Extensions.DependencyInjection.IServiceCollection"/> builder object.</returns>
+</member>
+<member name="M:Inertial.Giraffe.Core.Inertia`2.Location(System.String)">
+<summary>
+ Location method will force a client-side redirect to the url specified
+</summary>
+</member>
+<member name="T:Inertial.Giraffe.Core.Inertia`2">
+ <summary>
+ Inertia Singleton Base Class
+ </summary>
+ <returns>Inertia object</returns>
+</member>
+<member name="T:Inertial.Giraffe.Core.InertiaOptions">
+ <summary>
+ Inertia Options Class
+ </summary>
+ <returns>Inertia Options with default settings</returns>
+</member>
+</members>
+</doc>

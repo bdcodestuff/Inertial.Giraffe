@@ -1,0 +1,14 @@
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/bin/Debug/net8.0/Inertial.Giraffe.deps.json
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/bin/Debug/net8.0/Inertial.Giraffe.dll
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/bin/Debug/net8.0/Inertial.Giraffe.pdb
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/bin/Debug/net8.0/Inertial.Giraffe.xml
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/Inertial.Giraffe.fsproj.AssemblyReference.cache
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/Inertial.Giraffe.AssemblyInfoInputs.cache
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/Inertial.Giraffe.AssemblyInfo.fs
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/Inertial.Giraffe.fsproj.CoreCompileInputs.cache
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/Inertial.Giraffe.sourcelink.json
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/Inertial.Giraffe.dll
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/refint/Inertial.Giraffe.dll
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/Inertial.Giraffe.xml
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/Inertial.Giraffe.pdb
+/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/obj/Debug/net8.0/ref/Inertial.Giraffe.dll
