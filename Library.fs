@@ -1,121 +1,58 @@
-﻿module Inertial.Giraffe
+﻿namespace Inertial.Giraffe
 
 open System
-open Newtonsoft.Json
-open Microsoft.FSharpLu.Json
-
-
+open System.Threading.Tasks
+open System.Reactive.Subjects
+open FSharp.Control.Reactive
+open Microsoft.FSharp.Core
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Http.Extensions
 open Microsoft.AspNetCore.Antiforgery
-open Microsoft.Extensions.Primitives
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open System.Runtime.CompilerServices
 open Giraffe
 open Giraffe.ViewEngine
-open FSharp.Reflection
-
-// JSON
-let Formatting = Compact.CamelCaseNoFormatting.CompactCamelCaseNoFormattingSettings.formatting
-let Settings = Compact.CamelCaseNoFormatting.CompactCamelCaseNoFormattingSettings.settings
-
-
-/// Determine if the given header is present
-let private hdr (headers : IHeaderDictionary) hdr =
-    match headers[hdr] with it when it = StringValues.Empty -> None | it -> Some it[0]
-
-/// Helper to print prop function signature
-let private funString o =
-    let rec loop nested t =
-        if FSharpType.IsTuple t then
-            FSharpType.GetTupleElements t
-            |> Array.map (loop true)
-            |> String.concat " * "
-        elif FSharpType.IsFunction t then
-            let fs = if nested then sprintf "(%s -> %s)" else sprintf "%s -> %s"
-            let domain, range = FSharpType.GetFunctionElements t
-            fs (loop true domain) (loop false range)
-        else
-            t.FullName
-    loop false (o.GetType())
-
-/// Extensions to the header dictionary
-type IHeaderDictionary with
-  
-    /// Inertia Request
-    member this.Inertia with get () = hdr this "X-Inertia" |> Option.map bool.Parse
-
-    /// Inertia Version
-    member this.InertiaVersion with get () = hdr this "X-Inertia-Version"
-
-    /// Inertia Location
-    member this.InertiaLocation with get () = hdr this "X-Inertia-Location"
-
-    /// Inertia Partial Data
-    member this.InertiaPartialData with get () = hdr this "X-Inertia-Partial-Data"
-    
-    /// Inertia Partial Component
-    member this.InertiaPartialComponent with get () = hdr this "X-Inertia-Partial-Component"
-
-    /// Get the token from request set by axios when XSRF-COOKIE is present
-    member this.XSRFToken with get () = hdr this "X-XSRF-TOKEN"
-
-    /// Get the referer
-    member this.TryGetReferer with get () = hdr this "Referer"
-
-/// Extensions for the request object
-type HttpRequest with
-
-    /// Check whether this request was initiated from Inertia
-    member this.IsInertia with get () = this.Headers.Inertia |> Option.defaultValue false
-
-let private partialReq (ctx:HttpContext) (componentName:string) =
-    // Check if partial data request with specified component name
-    let isPartialReq, filter =
-        match ctx.Request.Headers.InertiaPartialData, ctx.Request.Headers.InertiaPartialComponent with
-        | Some partialData, Some comp when comp = componentName ->
-            true,
-            partialData.Split(',') 
-            |> Array.filter (fun x -> String.IsNullOrEmpty x |> not)
-            |> Array.map (_.Trim())
-        | _ ->
-            false,
-            [||]
-            
-    (isPartialReq, filter)
-   
-type Page<'Props,'Shared> =
-    {
-        ``component`` : string
-        version : string
-        url : string
-        title : string
-        props : 'Props option
-        refreshOnBack : bool
-        shared : 'Shared
-    }    
-    member x.toJson() =
-        //JsonSerializer.Serialize(x,options)
-        JsonConvert.SerializeObject(x, Formatting, Settings)
+open Types
+open Reflection
 
 [<AutoOpen>]
 module Core =
+    
+    /// Extensions to the header dictionary
+
+    let private partialReq (ctx:HttpContext) (componentName:string) =
+        // Check if partial data request with specified component name
+        let isPartialReq, filter =
+            match ctx.Request.Headers.InertiaPartialData, ctx.Request.Headers.InertiaPartialComponent with
+            | Some partialData, Some comp when comp = componentName ->
+                true,
+                partialData.Split(',') 
+                |> Array.filter (fun x -> String.IsNullOrEmpty x |> not)
+                |> Array.map (_.Trim())
+            | _ ->
+                false,
+                [||]
+                
+        (isPartialReq, filter)
     
     /// <summary>
     /// Inertia Options Class
     /// </summary>
     /// <returns>Inertia Options with default settings</returns>
-    type InertiaOptions (?jsPath:string,?cssPath:string,?headView:XmlNode,?rootView:string -> XmlNode,?sharePropHandler:HttpHandler) =
+    type InertiaOptions (?jsPath:string,?cssPath:string,?headView:XmlNode,?rootView:string -> XmlNode) =
         
         let defaultJsPath = "/js/index.js"
         
-        let defaultCssPath = "/js/style.css"
+        let defaultCssPath = "/css/style.css"
+        let defaultNProgressPath = "/css/nprogress.css"
         // if not otherwise specified, this is the root HTML head section for the app on first view and full-page reloads
         let defaultHtmlHead =
             head [] [
                 title [] [ str "Index" ]
-                link [ _rel "stylesheet" ; _href (defaultArg cssPath defaultCssPath) ] 
+                link [ _rel "icon" ; _href "data:," ]
+                link [ _rel "stylesheet" ; _href (defaultArg cssPath defaultCssPath) ]
+                link [ _rel "stylesheet" ; _href defaultNProgressPath ]
             ]
         
         /// if not otherwise specified, this is the root HTML view function for the app on first view and full-page reloads.
@@ -130,41 +67,32 @@ module Core =
             ]
             
         // default shared handler does nothing
-        let defaultSharedPropHandler () : HttpHandler = fun next ctx -> next ctx
+        //let defaultSharedPropHandler () : HttpHandler = fun next ctx -> next ctx
             
-        member val SharedPropHandler : HttpHandler = defaultArg sharePropHandler (defaultSharedPropHandler ()) with get, set
+        //member val SharedPropHandler : HttpHandler = defaultArg sharePropHandler (defaultSharedPropHandler ()) with get, set
         member val RootView = defaultArg rootView (defaultRootView defaultHtmlHead) with get, set
     
     /// <summary>
     /// Inertia Singleton Base Class
     /// </summary>
     /// <returns>Inertia object</returns>
-    type Inertia<'Props,'Shared> (options: InertiaOptions, resolver:'Props -> string * ('Props option -> bool -> string array -> Async<'Props option>), shared:'Shared) =
+    type Inertia<'Props,'Shared,'SSE> (options: InertiaOptions, resolver:'Props -> string, shareFn: HttpContext -> Task<'Shared>, sseInit: 'SSE) =
         
         member val Resolver = resolver with get
-        member val SharedProps = shared with get, set
+        member val ShareFn = shareFn with get, set
+        member val SSE = 
+            sseInit
+            |> Subject.behavior
+            |> Subject.Synchronize
+            with get, set
         member val Version : string = "1" with get, set
         member val RootView = options.RootView with get
         
-        // internal share prop handler
-        member private x.SharePropsHandler () = 
-            fun next ctx ->
-                x.FlushShared() |> ignore // clear the shared props on each req/resp cycle
-                options.SharedPropHandler next ctx
-
-        member x.ShareProp(s:'Shared) =
-            x.SharedProps <- s
-            x
-
-        member x.GetShared () = 
-            x.SharedProps
-            
-        member x.FlushShared () = 
-            x.SharedProps <- shared
-            x
+        /// Get version information
         member x.GetVersion () = 
             x.Version
             
+        /// Set version
         member x.SetVersion (version:string) = 
             x.Version <- version
             x
@@ -176,61 +104,64 @@ module Core =
                 ctx.SetContentType("text/html")
                 ctx.SetStatusCode StatusCodes.Status409Conflict
                 next ctx
-
-        //member x.Component(componentName:string,props:'Props,?title:string) =
+        
+        /// Define component with 'Props value and optional page title (defaults to component name if not specified)
         member x.Component(props:'Props,?title:string) =
             
             // get name and evaluator function from resolver
-            let componentName, evaluator = x.Resolver props
-            
+            let componentName = x.Resolver props
+
             // send shared props to response
-            InertiaResponse<'Props,'Shared>(
+            InertiaResponse<'Props,'Shared,'SSE>(
                 componentName = componentName,
                 props = Some props,
                 title = defaultArg title componentName, // if title is not specified default to using the component name
-                sharedPropsHandler = x.SharePropsHandler(),
-                sharedProps = x.GetShared(),
-                evaluator=evaluator,
+                sse=x.SSE,
+                shareFn=x.ShareFn,
                 rootView = x.RootView)
           
-    and InertiaResponse<'Props,'Shared> (
+    and InertiaResponse<'Props,'Shared, 'SSE> (
         componentName:string,
         title:string,
-        sharedPropsHandler:HttpHandler,
+        sse:ISubject<'SSE>,
         props:'Props option,
-        sharedProps:'Shared,
-        evaluator: 'Props option -> bool -> string array -> Async<'Props option>,
+        shareFn,
         rootView:string->XmlNode) =        
         member val private ComponentName = componentName
         member val private Title = title
-        member val private SharePropsHandler = sharedPropsHandler with get, set
+
         // initial response props are passed in from singleton shared props
         member val private Props = props with get, set
-        member val private Evaluator = evaluator with get, set
-        member val private SharedProps = sharedProps with get, set
         member val private RootView = rootView with get, set
         member val private RefreshOnBack = false with get, set
-        member val private ClearShareDuringResponse = (false,id) with get, set
+        member val private ReloadOnMount = {| shouldReload = false; propsToEval = None |} with get, set
+        member val private RealTime = true with get, set
+        member val private ModifyShareDuringResponse = (false,id) with get, set
         
         // override root HTML view on a per response basis
         member x.OverrideRootView(templateFn:string -> XmlNode) = 
             x.RootView <- templateFn
-            x
-            
-        // add prop
-        // member x.WithProp(p: 'Props) =
-        //     x.Props <- Some p
-        //     x                
+            x      
                
         // indicate that this component should trigger the client side router to refresh itself when user lands on it via back/foward buttons
         member x.SetRefreshOnBack() =
             x.RefreshOnBack <- true
             x
             
+        /// Indicate that this component should trigger the client side router to perform a partial data reload of itself after it first loads, evaluating all the fields in the Prop record type (including functions) OR just those fieldnames specified in toGet.
+        /// This is the main mechanism used to achieve asynchronous data loading on the server.  Props that have an Async function type signature don't get evaluated on first load, but do get evaluated when the component reloads.
+        member x.SetReloadOnMount(?toGet: PropsToEval) =
+            x.ReloadOnMount <- {| shouldReload = true; propsToEval = Some <| defaultArg toGet EvalAllProps |}
+            x
         
-        member x.UpdateShared(?emptyShare:'Shared ->'Shared ) =
-            let emptyShare = defaultArg emptyShare id
-            x.ClearShareDuringResponse <- (true,emptyShare)
+        /// Components listen for server-sent events at "/sse" by default; Calling this indicates that this component should not listen client-side.
+        member x.DisableRealtime() =
+            x.RealTime <- false
+            x
+        /// Pass in arbitrary function with signature 'Shared -> 'Shared that can alter the 'Shared data in this resonse only
+        member x.UpdateShared(?updater:'Shared ->'Shared ) =
+            let emptyShare = defaultArg updater id
+            x.ModifyShareDuringResponse <- (true,emptyShare)
             x
                        
         // function to return JSON page handler
@@ -253,31 +184,47 @@ module Core =
         // main handler logic
         member private x.ResponseHandler
             (?url:string,
+             ?connectionId:string,
              ?version:string) : HttpHandler =
             fun next ctx ->
                 task {
-                    let v = defaultArg version "1"
+                    let v = defaultArg version "1" // use default of 1
                     let url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
                     let isPartial, filter = partialReq ctx x.ComponentName
                     
-                    // evaluate any asynchronous functions if is a partial reload of same component
-                    let! propResultFn = x.Evaluator x.Props isPartial filter
- 
-                    let clearShare, withFn = x.ClearShareDuringResponse
+                    // check for client side id passed in via header
+                    let connectionId =
+                        match ctx.Request.InertiaId, connectionId with
+                        | Some clientId, _ -> clientId // if a clientId is passed in via header it indicates a partial data request and should override anything set server-side
+                        | None, Some serverId -> serverId
+                        | None, None -> ShortGuid.fromGuid(Guid.NewGuid()) // hit this branch on full page refresh; will be sent to client then back again in header on XML calls
                     
-                    let sharedProps =
-                        if clearShare then withFn x.SharedProps else x.SharedProps
+                    // Evaluate asynchronous props
+                    let! propResultAsync = evaluated x.Props filter isPartial
+                    // Cast back tp 'Props option type
+                    let propResult = propResultAsync :?> 'Props |> Some
+
+                    let shouldModifyShare, withFn = x.ModifyShareDuringResponse
+                    
+                    // Gets the shared props
+                    let! sharedProps = shareFn ctx
+                    // Modifies the shared props based on user-specified function
+                    let shared = if shouldModifyShare then withFn sharedProps else sharedProps
                     
                     let page : Page<'Props,'Shared> = {
                         ``component``= x.ComponentName
-                        props=propResultFn
-                        shared=sharedProps
+                        connectionId = connectionId
+                        props=propResult
+                        shared=shared
                         version=v
                         url=url
                         title=x.Title
                         refreshOnBack=x.RefreshOnBack
+                        reloadOnMount=x.ReloadOnMount
+                        realTime=x.RealTime 
                     }
 
+                    
                     
                     // check if this request initiates from inertiajs
                     if ctx.Request.IsInertia then
@@ -327,11 +274,13 @@ module Core =
                         else 
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
                 }
-        
-        // public rendering function 
-        member x.Render (?url:string,?version:string,?skipShared:bool) =
-            let skipShared = defaultArg skipShared false
-
+        // Method to do change the SSE json message and trigger SSE event client-side
+        member x.BroadcastSSE(nextMessage) =
+            sse.OnNext(nextMessage)
+            x
+            
+        /// Public rendering function that calls HttpHandler compatible with Giraffe pipeline
+        member x.Render (?url:string,?version:string) =
             let response =
                 match url, version with
                 | Some url, Some version ->
@@ -343,18 +292,28 @@ module Core =
                 | None, None ->
                     x.ResponseHandler()
 
-            if skipShared then
-                warbler (fun _ -> response)
-            else
-                warbler (fun _ -> x.SharePropsHandler >=> response)
+            response
             
     type ServiceCollectionExtensions() =
         /// <summary>
-        /// Adds default Inertia service to the ASP.NET Core service container.
-        /// A Props union type of individual page data and a Shared record type must be supplied at instantiation
+        /// Adds to the ASP.NET Core service container a default Inertia service and a custom JSON serializer that is compatible with the client-side inertial router
+        /// Requires the following:
+        /// 1.) Values specifying the public path of the js folder (jsPath) and css folder (cssPath)
+        /// 2.) A Props union type wrapping each individual page record type
+        /// 3.) A resolver function that maps the current Props value to a string name
+        /// 4.) A share function that takes the HTTPContext and returns a Shared data record wrapped as a Task
+        /// 5.) An initial SSE message
         /// </summary>
         /// <returns>Returns an <see cref="Microsoft.Extensions.DependencyInjection.IServiceCollection"/> builder object.</returns>
         [<Extension>]
-        static member AddInertia<'Props,'Shared>(svc : IServiceCollection, sharePropHandler : HttpHandler, jsPath: string, cssPath: string, resolver, shared:'Shared) =
-            svc.TryAddSingleton<Inertia<'Props,'Shared>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath,sharePropHandler=sharePropHandler),resolver,shared))
-            svc
+        static member AddInertia<'Props,'Shared,'SSE>(
+                svc : IServiceCollection,
+                jsPath: string,
+                cssPath: string,
+                resolver: 'Props -> string,
+                shareFn: HttpContext -> Task<'Shared>,
+                sseInit:'SSE
+            ) =
+                svc.AddSingleton<Json.ISerializer, FableRemotingJsonSerializer>() |> ignore
+                svc.TryAddSingleton<Inertia<'Props,'Shared,'SSE>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath),resolver,shareFn,sseInit))
+                svc

@@ -40,10 +40,20 @@
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
+            "FSharp.Control.Reactive": {
+              "target": "Package",
+              "version": "[5.0.5, )",
+              "generatePathProperty": true
+            },
             "FSharp.Core": {
               "include": "Runtime, Compile, Build, Native, Analyzers, BuildTransitive",
               "target": "Package",
               "version": "[8.0.401, )",
+              "generatePathProperty": true
+            },
+            "Fable.Remoting.Json": {
+              "target": "Package",
+              "version": "[2.25.0, )",
               "generatePathProperty": true
             },
             "Giraffe": {

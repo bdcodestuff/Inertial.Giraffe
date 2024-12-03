@@ -13,9 +13,10 @@
     <SourceRoot Include="/Users/bdmacrie/.nuget/packages/" />
   </ItemGroup>
   <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
-    <PkgNewtonsoft_Json Condition=" '$(PkgNewtonsoft_Json)' == '' ">/Users/bdmacrie/.nuget/packages/newtonsoft.json/10.0.3</PkgNewtonsoft_Json>
     <PkgFSharp_Core Condition=" '$(PkgFSharp_Core)' == '' ">/Users/bdmacrie/.nuget/packages/fsharp.core/8.0.401</PkgFSharp_Core>
     <PkgMicrosoft_FSharpLu_Json Condition=" '$(PkgMicrosoft_FSharpLu_Json)' == '' ">/Users/bdmacrie/.nuget/packages/microsoft.fsharplu.json/0.11.7</PkgMicrosoft_FSharpLu_Json>
     <PkgGiraffe Condition=" '$(PkgGiraffe)' == '' ">/Users/bdmacrie/.nuget/packages/giraffe/7.0.2</PkgGiraffe>
+    <PkgFSharp_Control_Reactive Condition=" '$(PkgFSharp_Control_Reactive)' == '' ">/Users/bdmacrie/.nuget/packages/fsharp.control.reactive/5.0.5</PkgFSharp_Control_Reactive>
+    <PkgFable_Remoting_Json Condition=" '$(PkgFable_Remoting_Json)' == '' ">/Users/bdmacrie/.nuget/packages/fable.remoting.json/2.25.0</PkgFable_Remoting_Json>
   </PropertyGroup>
 </Project>
