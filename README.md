@@ -203,3 +203,44 @@ let sseInit = InertialSSEEvent.empty()
 // include this line to your startup when adding services to you IServiceCollection
 services.AddInertia<Props,Shared,string>("/js/App.js","/css/style.css",(_.name),SharedHandler.shareFn,InertialSSEEvent.empty()) |> ignore
 ```
+15. To enable SSE messaging to the client you also need to create an endpoint at "/sse" (or an alternative so long as the client settings match) that does the following:
+```fsharp
+
+open System
+open Giraffe
+open Inertial.Giraffe
+open Microsoft.AspNetCore.Http
+open FSharp.Control
+open Microsoft.Extensions.Primitives
+open Common
+
+let sse : HttpHandler =
+    fun (_:HttpFunc) (ctx:HttpContext) ->
+        task {
+            let inertia = ctx.GetService<Inertia<Props,Shared,string>>()
+            let message = inertia.SSE
+            
+            ctx.Response.Headers.Add("Content-Type", StringValues "text/event-stream")
+
+            let requestAborted =
+                Async.AwaitWaitHandle ctx.RequestAborted.WaitHandle
+                |> Async.Ignore
+
+            do!
+                // create an observed stream on the input SSE message -- a JSON string in our case
+                // anytime the value changes it will trigger an SSE to the client
+                (message
+                |> AsyncSeq.ofObservableBuffered
+                |> AsyncSeq.takeUntilSignal requestAborted
+                |> AsyncSeq.iterAsync
+                    (fun next ->
+                        task {
+                            do! $"id: {ctx.Connection.Id}\n" |> ctx.Response.WriteAsync
+                            do! $"data: {next}\n\n" |> ctx.Response.WriteAsync
+                            do! ctx.Response.Body.FlushAsync()
+                            do! Async.Sleep(TimeSpan.FromSeconds 2.5)
+                        }
+                        |> Async.AwaitTask))
+            return! earlyReturn ctx
+        }
+```
