@@ -142,6 +142,7 @@ type Shared =
     and User =
     {
         email : string
+        id : string
     } 
 
 
