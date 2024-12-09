@@ -7,11 +7,12 @@ open System
 open System.Reflection
 
 
-[<assembly: System.Reflection.AssemblyCompanyAttribute("Inertial.Giraffe")>]
+[<assembly: System.Reflection.AssemblyCompanyAttribute("Bryan Macrie")>]
 [<assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")>]
-[<assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")>]
-[<assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b473e1b6e38c3c1c102fc64305b34bfce40297d8")>]
+[<assembly: System.Reflection.AssemblyFileVersionAttribute("0.0.1.0")>]
+[<assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.0.1+957b1b0fff6f68163cbbb43e1ad062a47f364a4f")>]
 [<assembly: System.Reflection.AssemblyProductAttribute("Inertial.Giraffe")>]
 [<assembly: System.Reflection.AssemblyTitleAttribute("Inertial.Giraffe")>]
-[<assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")>]
+[<assembly: System.Reflection.AssemblyVersionAttribute("0.0.1.0")>]
+[<assembly: System.Reflection.AssemblyMetadataAttribute("RepositoryUrl", "https://github.com/bdcodestuff/Inertial.Giraffe")>]
 do()

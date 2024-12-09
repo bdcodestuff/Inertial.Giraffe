@@ -5,7 +5,7 @@
   },
   "projects": {
     "/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/Inertial.Giraffe.fsproj": {
-      "version": "1.0.0",
+      "version": "0.0.1",
       "restore": {
         "projectUniqueName": "/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/Inertial.Giraffe.fsproj",
         "projectName": "Inertial.Giraffe",
@@ -29,6 +29,11 @@
             "targetAlias": "net8.0",
             "projectReferences": {}
           }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
         }
       },
       "frameworks": {

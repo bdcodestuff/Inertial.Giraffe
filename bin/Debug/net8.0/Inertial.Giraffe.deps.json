@@ -6,7 +6,7 @@
   "compilationOptions": {},
   "targets": {
     ".NETCoreApp,Version=v8.0": {
-      "Inertial.Giraffe/1.0.0": {
+      "Inertial.Giraffe/0.0.1": {
         "dependencies": {
           "FSharp.Control.Reactive": "5.0.5",
           "FSharp.Core": "8.0.401",
@@ -176,7 +176,7 @@
     }
   },
   "libraries": {
-    "Inertial.Giraffe/1.0.0": {
+    "Inertial.Giraffe/0.0.1": {
       "type": "project",
       "serviceable": false,
       "sha512": ""

@@ -6,10 +6,20 @@
     <AssemblyName>Inertial.Giraffe</AssemblyName>
     <RootNamespace>Inertial.Giraffe</RootNamespace>
     <PackageId>Inertial.Giraffe</PackageId>
+    <Version>0.0.1</Version>
     <Authors>Bryan Macrie</Authors>
-    <Company>Inertial.Giraffe</Company>
-    <Product>Inertial.Giraffe</Product>
+    <RepositoryUrl>https://github.com/bdcodestuff/Inertial.Giraffe</RepositoryUrl>
   </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="./LICENSE" Pack="true" PackagePath=""/>
+    <None Include="./README.md" Pack="true" PackagePath=""/>
+  </ItemGroup>
 
   <ItemGroup>
     <Compile Include="FableJson.fs" />
