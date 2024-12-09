@@ -132,8 +132,22 @@ let resolverFn = fun prop -> prop.name
 ``` 
 12. The shareFunction takes the HttpContext and returns an instance of the 'Shared type wrapped in Task.  The idea here is that this function runs each time the app loads a component and it pulls in data that should be included in each view, think signed in user data or flash messages.  This is an example implementation assuming the use of Asp.Identity:
 ```fsharp
+
+// assuming the following Shared type in "Common" project
+
+type Shared =
+    {
+        user: User option
+    }
+    and User =
+    {
+        email : string
+    } 
+
+
+
 open Inertial.Giraffe
-   
+
 module SharedHandler =
     let shareFn (ctx:HttpContext) =
         task {
@@ -147,12 +161,12 @@ module SharedHandler =
                     let! user = userManager.FindByIdAsync claim.Value
 
                     // data gets shared across current request/response
-                    return { user = Some { email = user.Email; id = claim.Value } ; flash = None }
+                    return { user = Some { email = user.Email; id = claim.Value } }
                 | None ->
-                    return { user = None ; flash = None}
+                    return { user = None }
                 
             else
-                return { user = None ; flash = None}
+                return { user = None }
                
         }
 ```
