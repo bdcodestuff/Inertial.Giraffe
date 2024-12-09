@@ -11,16 +11,70 @@ open Microsoft.AspNetCore.Antiforgery
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.DependencyInjection.Extensions
 open System.Runtime.CompilerServices
+open Newtonsoft.Json
+open FableJson
+open Types
 open Giraffe
 open Giraffe.ViewEngine
-open Types
 open Reflection
 
 [<AutoOpen>]
 module Core =
     
-    /// Extensions to the header dictionary
-
+    
+    type RealTimePredicates =
+    | ComponentIsOneOf of string array
+    | ComponentIsAnyExcept of string array
+    | UserIdIsOneOf of string array
+        
+    type PropsToEval =
+    | EvalAllProps
+    | OnlyEvalProps of string array
+       
+    type Predicates =
+        {
+            predicates : RealTimePredicates array
+            propsToEval : PropsToEval
+        }
+    type InertialSSEEvent =
+        {
+            title : string
+            connectionId: string option
+            predicates : Predicates
+            firedOn : System.DateTime
+        }
+        static member empty () =
+            { title = ""; connectionId = None; predicates = { predicates = [||]; propsToEval = EvalAllProps  } ; firedOn = System.DateTime.UtcNow }.toJson()
+        
+        /// Create a new SSE event that is sent to client as json for decoding
+        static member create (ctx:HttpContext) (title:string) (propsToEvaluate: PropsToEval) (ifPredicatesMatch : RealTimePredicates list)  =
+            {
+                title = title
+                connectionId = ctx.Request.InertiaId
+                predicates = { predicates = (Array.ofList ifPredicatesMatch) ; propsToEval = propsToEvaluate }
+                firedOn = System.DateTime.UtcNow
+            }
+                .toJson()
+            
+        member x.toJson() = JsonConvert.SerializeObject(x,converters=[|fableConverter|])
+        
+    type Page<'Props,'Shared> =
+        {
+            ``component`` : string
+            version : string
+            connectionId: string
+            url : string
+            title : string
+            props : 'Props option
+            refreshOnBack : bool
+            reloadOnMount : {| shouldReload : bool; propsToEval: PropsToEval option |}
+            realTime : bool
+            shared : 'Shared
+        }    
+        member x.toJson() =
+            JsonConvert.SerializeObject(x,converters=[|fableConverter|])
+    
+    
     let private partialReq (ctx:HttpContext) (componentName:string) =
         // Check if partial data request with specified component name
         let isPartialReq, filter =
@@ -275,8 +329,10 @@ module Core =
                             return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
                 }
         // Method to do change the SSE json message and trigger SSE event client-side
-        member x.BroadcastSSE(nextMessage) =
-            sse.OnNext(nextMessage)
+        member x.BroadcastSSE(nextMessage,?broadcastPredicate) =
+            let pred = defaultArg broadcastPredicate true
+            if pred then
+                sse.OnNext(nextMessage)
             x
             
         /// Public rendering function that calls HttpHandler compatible with Giraffe pipeline

@@ -14,9 +14,10 @@
   <ItemGroup>
     <Compile Include="FableJson.fs" />
     <Compile Include="Types.fs" />
-    <Compile Include="Public.fs" />
     <Compile Include="Reflection.fs" />
     <Compile Include="Library.fs" />
+    <Content Include="README.md" />
+    <Content Include="LICENSE" />
   </ItemGroup>
 
   <ItemGroup>

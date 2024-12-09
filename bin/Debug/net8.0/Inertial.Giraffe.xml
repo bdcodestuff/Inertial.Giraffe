@@ -52,11 +52,6 @@
  Determine if the given header is present
 </summary>
 </member>
-<member name="M:Inertial.Giraffe.Public.InertialSSEEvent.create(Microsoft.AspNetCore.Http.HttpContext,System.String,Inertial.Giraffe.Public.PropsToEval,Microsoft.FSharp.Collections.FSharpList{Inertial.Giraffe.Public.RealTimePredicates})">
-<summary>
- Create a new SSE event that is sent to client as json for decoding
-</summary>
-</member>
 <member name="M:Inertial.Giraffe.Core.ServiceCollectionExtensions.AddInertia``3(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.String,System.String,Microsoft.FSharp.Core.FSharpFunc{``0,System.String},Microsoft.FSharp.Core.FSharpFunc{Microsoft.AspNetCore.Http.HttpContext,System.Threading.Tasks.Task{``1}},``2)">
  <summary>
  Adds to the ASP.NET Core service container a default Inertia service and a custom JSON serializer that is compatible with the client-side inertial router
@@ -74,7 +69,7 @@
  Pass in arbitrary function with signature &apos;Shared -&gt; &apos;Shared that can alter the &apos;Shared data in this resonse only
 </summary>
 </member>
-<member name="M:Inertial.Giraffe.Core.InertiaResponse`3.SetReloadOnMount(Microsoft.FSharp.Core.FSharpOption{Inertial.Giraffe.Public.PropsToEval})">
+<member name="M:Inertial.Giraffe.Core.InertiaResponse`3.SetReloadOnMount(Microsoft.FSharp.Core.FSharpOption{Inertial.Giraffe.Core.PropsToEval})">
 <summary>
  Indicate that this component should trigger the client side router to perform a partial data reload of itself after it first loads, evaluating all the fields in the Prop record type (including functions) OR just those fieldnames specified in toGet.
  This is the main mechanism used to achieve asynchronous data loading on the server.  Props that have an Async function type signature don&apos;t get evaluated on first load, but do get evaluated when the component reloads.
@@ -122,9 +117,9 @@
  </summary>
  <returns>Inertia Options with default settings</returns>
 </member>
-<member name="M:Inertial.Giraffe.Core.partialReq(Microsoft.AspNetCore.Http.HttpContext,System.String)">
+<member name="M:Inertial.Giraffe.Core.InertialSSEEvent.create(Microsoft.AspNetCore.Http.HttpContext,System.String,Inertial.Giraffe.Core.PropsToEval,Microsoft.FSharp.Collections.FSharpList{Inertial.Giraffe.Core.RealTimePredicates})">
 <summary>
- Extensions to the header dictionary
+ Create a new SSE event that is sent to client as json for decoding
 </summary>
 </member>
 </members>
