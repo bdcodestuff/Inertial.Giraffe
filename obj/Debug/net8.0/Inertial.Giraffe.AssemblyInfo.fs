@@ -10,7 +10,7 @@ open System.Reflection
 [<assembly: System.Reflection.AssemblyCompanyAttribute("Bryan Macrie")>]
 [<assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")>]
 [<assembly: System.Reflection.AssemblyFileVersionAttribute("0.0.1.0")>]
-[<assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.0.1+957b1b0fff6f68163cbbb43e1ad062a47f364a4f")>]
+[<assembly: System.Reflection.AssemblyInformationalVersionAttribute("0.0.1+ed65af611592adb9ac7e649f8b66ee39ea1f9832")>]
 [<assembly: System.Reflection.AssemblyProductAttribute("Inertial.Giraffe")>]
 [<assembly: System.Reflection.AssemblyTitleAttribute("Inertial.Giraffe")>]
 [<assembly: System.Reflection.AssemblyVersionAttribute("0.0.1.0")>]

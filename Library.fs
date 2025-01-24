@@ -25,6 +25,7 @@ module Core =
     type RealTimePredicates =
     | ComponentIsOneOf of string array
     | ComponentIsAnyExcept of string array
+    | ComponentIsAny
     | UserIdIsOneOf of string array
         
     type PropsToEval =
@@ -352,13 +353,13 @@ module Core =
             
     type ServiceCollectionExtensions() =
         /// <summary>
-        /// Adds to the ASP.NET Core service container a default Inertia service and a custom JSON serializer that is compatible with the client-side inertial router
+        /// Adds to the ASP.NET Core service container a default Inertial service and a custom JSON serializer that is compatible with the client-side inertial router
         /// Requires the following:
         /// 1.) Values specifying the public path of the js folder (jsPath) and css folder (cssPath)
-        /// 2.) A Props union type wrapping each individual page record type
-        /// 3.) A resolver function that maps the current Props value to a string name
-        /// 4.) A share function that takes the HTTPContext and returns a Shared data record wrapped as a Task
-        /// 5.) An initial SSE message
+        /// 2.) A Props union type that wraps each individual "page" record type
+        /// 3.) A resolver function that maps the Props value to a string name used to look up the matching component on the client-side
+        /// 4.) A "shared" function that takes the HTTPContext and returns a Shared data record that is present for each component
+        /// 5.) An initial server-sent event (SSE) message
         /// </summary>
         /// <returns>Returns an <see cref="Microsoft.Extensions.DependencyInjection.IServiceCollection"/> builder object.</returns>
         [<Extension>]
