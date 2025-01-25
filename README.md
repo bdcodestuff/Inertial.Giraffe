@@ -77,14 +77,13 @@ To make this work you need to do the following:
         | Index of IndexPage
         static member index = nameof Props.Index
    
-        static member decoder (name: string) : Decoder<Props option> = 
+        static member decoder (name: string) : Decoder<Props> = 
         // note that this decoder is a function that takes a string matching the component name 
         // and returns a decoder that has been mapped back to Option<Props>
             match name with
-            | name when name = Props.index ->
+            | "Index" ->
                 IndexPage.decoder 
                 |> Decode.map Index
-                |> Decode.map Some
             | notFound -> 
                  failwith 
                      $"Could not find matching decoder for component named: {notFound}"
@@ -108,29 +107,13 @@ To make this work you need to do the following:
     svc : IServiceCollection,
     jsPath: string,
     cssPath: string,
-    resolver: 'Props -> string,
     shareFn: HttpContext -> Task<'Shared>,
     sseInit:'SSE)
 ```
 9. 'Props and 'Shared are defined from Props and Shared types in the "Common" library and 'SSE generic type refers to the server sent messsage type that is observed -- most often just some JSON in string form
 10. The jsPath and cssPath arguments refer to the path of the js app bundle and cssPath bundle in the wwwroot folder of the web app.  This should be customized to your specific scenario.
-11. The resolver function takes in a 'Props and returns the string name of the associated component.  In my example below I attached an instance method to the 'Props type that pattern matches and returns the name:
-```fsharp
-// based on this type definition in your "Common" library project
-type Props =
-    | Index of Index
-    
-    member x.name =
-        match x with
-        | Index _ -> Props.index
-    
-    static member index = nameof Props.Index
 
-// you can use the following as your "resolver" argument:
-let resolverFn = fun prop -> prop.name
-
-``` 
-12. The shareFunction takes the HttpContext and returns an instance of the 'Shared type wrapped in Task.  The idea here is that this function runs each time the app loads a component and it pulls in data that should be included in each view, think signed in user data or flash messages.  This is an example implementation assuming the use of Asp.Identity:
+11. The shareFunction takes the HttpContext and returns an instance of the 'Shared type wrapped in Task.  The idea here is that this function runs each time the app loads a component and it pulls in data that should be included in each view, think signed in user data or flash messages.  This is an example implementation assuming the use of Asp.Identity:
 ```fsharp
 
 // assuming the following Shared type in "Common" project
@@ -171,7 +154,7 @@ module SharedHandler =
                
         }
 ```
-13. The sseInit argument is the starting message.  If you 'SSE type is string this could be an empty "".  If you are using a more complex JSON string to pass messages it might be some initialized record type converted to JSON like below:
+12. The sseInit argument is the starting message.  If you 'SSE type is string this could be an empty "".  If you are using a more complex JSON string to pass messages it might be some initialized record type converted to JSON like below:
 ```fsharp
 
 open Fable.Remoting.Json
@@ -197,11 +180,11 @@ type InertialSSEEvent =
 // then your sseInit would be
 let sseInit = InertialSSEEvent.empty()
 ```
-14. Putting it all together you can add Inertia to the app:
+13. Putting it all together you can add Inertia to the app:
 ```fsharp
 
 // include this line to your startup when adding services to you IServiceCollection
-services.AddInertia<Props,Shared,string>("/js/App.js","/css/style.css",(_.name),SharedHandler.shareFn,InertialSSEEvent.empty()) |> ignore
+services.AddInertia<Props,Shared,string>("/js/App.js","/css/style.css",SharedHandler.shareFn,InertialSSEEvent.empty()) |> ignore
 ```
 15. To enable SSE messaging to the client you also need to create an endpoint at "/sse" (or an alternative so long as the client settings match) that does the following:
 ```fsharp
