@@ -131,9 +131,9 @@ module Core =
     /// Inertia Singleton Base Class
     /// </summary>
     /// <returns>Inertia object</returns>
-    type Inertia<'Props,'Shared,'SSE> (options: InertiaOptions, resolver:'Props -> string, shareFn: HttpContext -> Task<'Shared>, sseInit: 'SSE) =
+    type Inertia<'Props,'Shared,'SSE> (options: InertiaOptions, shareFn: HttpContext -> Task<'Shared>, sseInit: 'SSE) =
         
-        member val Resolver = resolver with get
+        //member val Resolver = Reflection.resolver
         member val ShareFn = shareFn with get, set
         member val SSE = 
             sseInit
@@ -164,7 +164,8 @@ module Core =
         member x.Component(props:'Props,?title:string) =
             
             // get name and evaluator function from resolver
-            let componentName = x.Resolver props
+            //let componentName = x.Resolver props
+            let componentName = resolver props
 
             // send shared props to response
             InertiaResponse<'Props,'Shared,'SSE>(
@@ -357,9 +358,8 @@ module Core =
         /// Requires the following:
         /// 1.) Values specifying the public path of the js folder (jsPath) and css folder (cssPath)
         /// 2.) A Props union type that wraps each individual "page" record type
-        /// 3.) A resolver function that maps the Props value to a string name used to look up the matching component on the client-side
-        /// 4.) A "shared" function that takes the HTTPContext and returns a Shared data record that is present for each component
-        /// 5.) An initial server-sent event (SSE) message
+        /// 3.) A "shared" function that takes the HTTPContext and returns a Shared data record that is present for each component
+        /// 4.) An initial server-sent event (SSE) message
         /// </summary>
         /// <returns>Returns an <see cref="Microsoft.Extensions.DependencyInjection.IServiceCollection"/> builder object.</returns>
         [<Extension>]
@@ -367,10 +367,9 @@ module Core =
                 svc : IServiceCollection,
                 jsPath: string,
                 cssPath: string,
-                resolver: 'Props -> string,
                 shareFn: HttpContext -> Task<'Shared>,
                 sseInit:'SSE
             ) =
                 svc.AddSingleton<Json.ISerializer, FableRemotingJsonSerializer>() |> ignore
-                svc.TryAddSingleton<Inertia<'Props,'Shared,'SSE>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath),resolver,shareFn,sseInit))
+                svc.TryAddSingleton<Inertia<'Props,'Shared,'SSE>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath),shareFn,sseInit))
                 svc

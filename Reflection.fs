@@ -127,12 +127,31 @@ let evaluated propsToEval filter isPartial =
             
         let expr =
           Expr.NewUnionCase(
-            FSharpType.GetUnionCases(outerPropsUCType) |> Array.pick (
+            FSharpType.GetUnionCases(outerPropsUCType) |>
                 function
-                    | x when x.Name = outerPropsUCType.Name ->
-                        Some x
-                    | _ -> None),
-            [ newRcdExpr ] )
+                | [||] -> failwith "Provided props input does not have required format of a union type of records"
+                | [|a|] -> a, [ newRcdExpr ] // single case union type (ie Props only has one case)
+                | b -> b
+                       |> Array.pick (
+                                function
+                                | x when x.Name = outerPropsUCType.Name -> Some x
+                                | _ -> None),  [ newRcdExpr ]
+                )
 
         return expr |> eval
     }
+    
+let resolver (p: 'Props) =
+    let outerType = p.GetType()
+    let unionCases = FSharpType.GetUnionCases(typeof<'Props>)
+    
+    let matchType =
+        match unionCases with
+        | [||] -> failwith "Props must be a union case"
+        | [|a|] -> a // single case union case
+        | uc ->
+            uc |> Array.pick (
+                function
+                | x when x.Name = outerType.Name -> Some x
+                | _ -> None)
+    matchType.Name
