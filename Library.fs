@@ -37,22 +37,33 @@ module Core =
             predicates : RealTimePredicates array
             propsToEval : PropsToEval
         }
+        
+    type NextSSE<'SSE> =
+        {
+            nextMsg : Option<string -> string -> 'SSE>
+            nextPred : bool option
+        }
+        
     type InertialSSEEvent =
         {
+            id : Guid
             title : string
             connectionId: string
             predicates : Predicates
-            firedOn : System.DateTime
+            origin : string 
+            firedOn : DateTime
         }
         static member empty () =
-            { title = ""; connectionId = ""; predicates = { predicates = [||]; propsToEval = EvalAllProps  } ; firedOn = DateTime.UtcNow }.toJson()
+            { id = Guid.Empty ; title = ""; connectionId = ""; predicates = { predicates = [||]; propsToEval = EvalAllProps  } ; origin = ""; firedOn = DateTime.UtcNow }.toJson()
         
         /// Create a new SSE event that is sent to client as json for decoding
-        static member create (title:string) (propsToEvaluate: PropsToEval) (ifPredicatesMatch : RealTimePredicates list) cid =
+        static member create (title:string) (propsToEvaluate: PropsToEval) (ifPredicatesMatch : RealTimePredicates list) url cid =
             {
+                id = Guid.NewGuid()
                 title = title
                 connectionId = cid
                 predicates = { predicates = (Array.ofList ifPredicatesMatch) ; propsToEval = propsToEvaluate }
+                origin = url
                 firedOn = DateTime.UtcNow
             }.toJson()
             
@@ -89,8 +100,10 @@ module Core =
                 [||]
                 
         (isPartialReq, filter)
-    
+               
     let private isSSE (ctx:HttpContext) = ctx.Request.IsInertialSSE
+    
+    let private isReload (ctx:HttpContext) = ctx.Request.IsInertialReload
     
     /// <summary>
     /// Inertia Options Class
@@ -143,15 +156,7 @@ module Core =
             with get, set
 
         member val RootView = options.RootView with get
-                    
-        /// Location method will force a client-side redirect to the url specified
-        member _.Location(url:string) : HttpHandler =
-            fun next ctx ->
-                ctx.SetHttpHeader("X-Inertia-Location",url)
-                ctx.SetContentType("text/html")
-                ctx.SetStatusCode StatusCodes.Status409Conflict
-                next ctx
-        
+                            
         /// Define component with 'Props value and optional page title (defaults to component name if not specified)
         member x.Component(props:'Props,?title:string) =
             
@@ -177,7 +182,8 @@ module Core =
         rootView:string->XmlNode) =        
         member val private ComponentName = componentName
         
-        member val private NextSSE = {| nextMsg = None ; nextPred = None |} with get, set        
+        member val private NextSSE : NextSSE<'SSE> =
+            { nextMsg = None ; nextPred = None } with get, set        
         member val private Title = title
 
         // initial response props are passed in from singleton shared props
@@ -219,7 +225,7 @@ module Core =
         member private _.ReturnJsonPage (page:Page<'Props,'Shared>) : HttpHandler =
             fun next ctx ->
                 task {
-                    ctx.SetHttpHeader("X-Inertia","true")
+                    ctx.SetHttpHeader("X-Inertial","true")
                     ctx.SetHttpHeader("Vary","accept")
                     return! json page next ctx
                 }
@@ -228,15 +234,15 @@ module Core =
         member private _.ForceRefresh (url:string) : HttpHandler =
             fun next ctx ->
                 task {
-                    ctx.SetHttpHeader("X-Inertia-Location",url)
+                    ctx.SetHttpHeader("X-Inertial-Location",url)
                     ctx.SetContentType("text/html")
                     ctx.SetStatusCode StatusCodes.Status409Conflict
                     return! next ctx
                 }
               
-                // Method to do change the SSE json message and trigger SSE event client-side
-        member x.BroadcastSSE(nextMessage:string -> 'SSE,?broadcastPredicate:bool) =
-            x.NextSSE <- {| nextMsg = Some nextMessage; nextPred = broadcastPredicate |}
+        // Method to do change the SSE json message and trigger SSE event client-side
+        member x.BroadcastSSE(nextMessage:string -> string -> 'SSE,?broadcastPredicate:bool) =
+            x.NextSSE <- { nextMsg = Some nextMessage; nextPred = broadcastPredicate }
             x
                 
         // main handler logic
@@ -247,6 +253,8 @@ module Core =
                         let version = defaultArg version "1" // use default of 1
                         let url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
                         let isPartial, filter = partialReq ctx x.ComponentName
+                        let isSSE = ctx.Request.IsInertialSSE
+                        let isReload = ctx.Request.IsInertialReload
                         
                         // check for client side id passed in via header
                         let connectionId =
@@ -279,12 +287,13 @@ module Core =
                             realTime=x.RealTime 
                         }
 
-                        let fireNextEvent =
-                            let pred = defaultArg x.NextSSE.nextPred true
-                            if pred && not ctx.Request.IsInertialSSE && partialReq ctx x.ComponentName |> fst |> not then
+                        let fireNextEvent () =
+                            let matchesUserPred = defaultArg x.NextSSE.nextPred true
+                            if matchesUserPred && not isSSE && not isReload then
                                 match x.NextSSE.nextMsg with
                                 | Some nextFn ->
-                                    sse.OnNext(nextFn connectionId)
+                                    //printfn $"isSSE:{isSSE}, isReload:{isReload} -- sending SSE message "
+                                    sse.OnNext(nextFn url connectionId)
                                 | None -> ()
                         
                         
@@ -304,7 +313,7 @@ module Core =
                                             return! x.ForceRefresh(url) next ctx
                                         // versions match so pass through to json response
                                         | _ -> 
-                                            fireNextEvent
+                                            fireNextEvent()
                                             return! x.ReturnJsonPage page next ctx
                                     // Other method type so check if redirect
                                     else
@@ -316,7 +325,7 @@ module Core =
                                             ctx.SetStatusCode StatusCodes.Status303SeeOther
                                             return! next ctx
                                         else
-                                            fireNextEvent
+                                            fireNextEvent()
                                             return! x.ReturnJsonPage page next ctx
                                 else
                                     // clear response, set 403 status and return early
@@ -334,7 +343,7 @@ module Core =
                                 options.SameSite <- SameSiteMode.Strict
                                 ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
                                 
-                                fireNextEvent
+                                fireNextEvent()
                                 // pass through json as string to body data-page tag in full page handler
                                 return! (page.toJson() |> x.RootView |> htmlView) next ctx
                             else 

@@ -109,8 +109,11 @@ module Types =
         /// Inertia Request
         member this.Inertial with get () = hdr this "X-Inertial" |> Option.map bool.Parse
 
-        /// Inertia Request
-        member this.InertialSSE with get () = hdr this "X-Inertial-SSE-Response" |> Option.map bool.Parse
+        /// Is Inertia SSE Triggered
+        member this.InertialSSE with get () = hdr this "X-Inertial-SSE" |> Option.map bool.Parse
+        
+        /// Is Inertia Reload
+        member this.InertialReload with get () = hdr this "X-Inertial-Reload" |> Option.map bool.Parse
         
         /// Inertia Version
         member this.InertialVersion with get () = hdr this "X-Inertial-Version"
@@ -118,14 +121,15 @@ module Types =
         /// Inertia Location
         member this.InertialLocation with get () = hdr this "X-Inertial-Location"
 
-        /// Inertia Partial Data
+        /// Inertial Partial Data
         member this.InertialPartialData with get () = hdr this "X-Inertial-Partial-Data"
         
-        /// Inertia Id from client
+        /// Inertial Id from client
         member this.InertialId with get () = hdr this "X-Inertial-Id"
         
-        /// Inertia Partial Component
+        /// Inertial Partial Component
         member this.InertialPartialComponent with get () = hdr this "X-Inertial-Partial-Component"
+        
 
         /// Get the token from request set by axios when XSRF-COOKIE is present
         member this.XSRFToken with get () = hdr this "X-XSRF-TOKEN"
@@ -139,8 +143,11 @@ module Types =
         /// Check whether this request was initiated from Inertia
         member this.IsInertial with get () = this.Headers.Inertial |> Option.defaultValue false
         
-        /// Check whether this request originated as an SSE reload response from Inertia
+        /// Check whether this request resulted from an SSE-triggered reload from Inertia
         member this.IsInertialSSE with get () = this.Headers.InertialSSE |> Option.defaultValue false
+        
+        /// Check whether this request resulted from a Reload from Inertia
+        member this.IsInertialReload with get () = this.Headers.InertialReload |> Option.defaultValue false
         
         member this.InertialId with get () = this.Headers.InertialId |> Option.defaultValue (ShortGuid.fromGuid(System.Guid.NewGuid()))
         //member this.InertiaIdOrNew with get () = this.Headers.InertiaId |> Option.defaultValue (Guid.NewGuid().ToString())
