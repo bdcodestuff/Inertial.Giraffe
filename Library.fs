@@ -40,22 +40,21 @@ module Core =
     type InertialSSEEvent =
         {
             title : string
-            connectionId: string option
+            connectionId: string
             predicates : Predicates
             firedOn : System.DateTime
         }
         static member empty () =
-            { title = ""; connectionId = None; predicates = { predicates = [||]; propsToEval = EvalAllProps  } ; firedOn = System.DateTime.UtcNow }.toJson()
+            { title = ""; connectionId = ""; predicates = { predicates = [||]; propsToEval = EvalAllProps  } ; firedOn = DateTime.UtcNow }.toJson()
         
         /// Create a new SSE event that is sent to client as json for decoding
-        static member create (ctx:HttpContext) (title:string) (propsToEvaluate: PropsToEval) (ifPredicatesMatch : RealTimePredicates list)  =
+        static member create (title:string) (propsToEvaluate: PropsToEval) (ifPredicatesMatch : RealTimePredicates list) cid =
             {
                 title = title
-                connectionId = ctx.Request.InertiaId
+                connectionId = cid
                 predicates = { predicates = (Array.ofList ifPredicatesMatch) ; propsToEval = propsToEvaluate }
-                firedOn = System.DateTime.UtcNow
-            }
-                .toJson()
+                firedOn = DateTime.UtcNow
+            }.toJson()
             
         member x.toJson() = JsonConvert.SerializeObject(x,converters=[|fableConverter|])
         
@@ -79,7 +78,7 @@ module Core =
     let private partialReq (ctx:HttpContext) (componentName:string) =
         // Check if partial data request with specified component name
         let isPartialReq, filter =
-            match ctx.Request.Headers.InertiaPartialData, ctx.Request.Headers.InertiaPartialComponent with
+            match ctx.Request.Headers.InertialPartialData, ctx.Request.Headers.InertialPartialComponent with
             | Some partialData, Some comp when comp = componentName ->
                 true,
                 partialData.Split(',') 
@@ -90,6 +89,8 @@ module Core =
                 [||]
                 
         (isPartialReq, filter)
+    
+    let private isSSE (ctx:HttpContext) = ctx.Request.IsInertialSSE
     
     /// <summary>
     /// Inertia Options Class
@@ -140,18 +141,9 @@ module Core =
             |> Subject.behavior
             |> Subject.Synchronize
             with get, set
-        member val Version : string = "1" with get, set
+
         member val RootView = options.RootView with get
-        
-        /// Get version information
-        member x.GetVersion () = 
-            x.Version
-            
-        /// Set version
-        member x.SetVersion (version:string) = 
-            x.Version <- version
-            x
-            
+                    
         /// Location method will force a client-side redirect to the url specified
         member _.Location(url:string) : HttpHandler =
             fun next ctx ->
@@ -184,6 +176,8 @@ module Core =
         shareFn,
         rootView:string->XmlNode) =        
         member val private ComponentName = componentName
+        
+        member val private NextSSE = {| nextMsg = None ; nextPred = None |} with get, set        
         member val private Title = title
 
         // initial response props are passed in from singleton shared props
@@ -214,7 +208,8 @@ module Core =
         member x.DisableRealtime() =
             x.RealTime <- false
             x
-        /// Pass in arbitrary function with signature 'Shared -> 'Shared that can alter the 'Shared data in this resonse only
+            
+        /// Pass in arbitrary function with signature 'Shared -> 'Shared that can alter the 'Shared data in this response only
         member x.UpdateShared(?updater:'Shared ->'Shared ) =
             let emptyShare = defaultArg updater id
             x.ModifyShareDuringResponse <- (true,emptyShare)
@@ -228,6 +223,7 @@ module Core =
                     ctx.SetHttpHeader("Vary","accept")
                     return! json page next ctx
                 }
+                
         // function refresh if asset versioning is off
         member private _.ForceRefresh (url:string) : HttpHandler =
             fun next ctx ->
@@ -237,105 +233,114 @@ module Core =
                     ctx.SetStatusCode StatusCodes.Status409Conflict
                     return! next ctx
                 }
+              
+                // Method to do change the SSE json message and trigger SSE event client-side
+        member x.BroadcastSSE(nextMessage:string -> 'SSE,?broadcastPredicate:bool) =
+            x.NextSSE <- {| nextMsg = Some nextMessage; nextPred = broadcastPredicate |}
+            x
+                
         // main handler logic
         member private x.ResponseHandler
-            (?url:string,
-             ?connectionId:string,
-             ?version:string) : HttpHandler =
-            fun next ctx ->
-                task {
-                    let v = defaultArg version "1" // use default of 1
-                    let url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
-                    let isPartial, filter = partialReq ctx x.ComponentName
-                    
-                    // check for client side id passed in via header
-                    let connectionId =
-                        match ctx.Request.InertiaId, connectionId with
-                        | Some clientId, _ -> clientId // if a clientId is passed in via header it indicates a partial data request and should override anything set server-side
-                        | None, Some serverId -> serverId
-                        | None, None -> ShortGuid.fromGuid(Guid.NewGuid()) // hit this branch on full page refresh; will be sent to client then back again in header on XML calls
-                    
-                    // Evaluate asynchronous props
-                    let! propResultAsync = evaluated x.Props filter isPartial
-                    // Cast back tp 'Props option type
-                    let propResult = propResultAsync :?> 'Props |> Some
+            (?url:string, ?connectionId:string, ?version:string) : HttpHandler =
+                fun next ctx ->
+                    task {
+                        let version = defaultArg version "1" // use default of 1
+                        let url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
+                        let isPartial, filter = partialReq ctx x.ComponentName
+                        
+                        // check for client side id passed in via header
+                        let connectionId =
+                            match connectionId with
+                            | Some serverId -> serverId
+                            | None -> ctx.Request.InertialId // hit this branch on full page refresh; will be sent to client then back again in header on XML calls
+                        
+                        // Evaluate asynchronous props
+                        let! propResultAsync = evaluated x.Props filter isPartial
+                        // Cast back tp 'Props option type
+                        let propResult = propResultAsync :?> 'Props |> Some
 
-                    let shouldModifyShare, withFn = x.ModifyShareDuringResponse
-                    
-                    // Gets the shared props
-                    let! sharedProps = shareFn ctx
-                    // Modifies the shared props based on user-specified function
-                    let shared = if shouldModifyShare then withFn sharedProps else sharedProps
-                    
-                    let page : Page<'Props,'Shared> = {
-                        ``component``= x.ComponentName
-                        connectionId = connectionId
-                        props=propResult
-                        shared=shared
-                        version=v
-                        url=url
-                        title=x.Title
-                        refreshOnBack=x.RefreshOnBack
-                        reloadOnMount=x.ReloadOnMount
-                        realTime=x.RealTime 
-                    }
+                        let shouldModifyShare, withFn = x.ModifyShareDuringResponse
+                        
+                        // Gets the shared props
+                        let! sharedProps = shareFn ctx
+                        // Modifies the shared props based on user-specified function
+                        let shared = if shouldModifyShare then withFn sharedProps else sharedProps
+                        
+                        let page : Page<'Props,'Shared> = {
+                            ``component``= x.ComponentName
+                            connectionId = connectionId
+                            props=propResult
+                            shared=shared
+                            version=version
+                            url=url
+                            title=x.Title
+                            refreshOnBack=x.RefreshOnBack
+                            reloadOnMount=x.ReloadOnMount
+                            realTime=x.RealTime 
+                        }
 
-                    
-                    
-                    // check if this request initiates from inertiajs
-                    if ctx.Request.IsInertia then
-                        // check header for token sent by client and for matching cookie set by server
-                        match ctx.Request.Headers.XSRFToken, ctx.GetCookieValue("XSRF-TOKEN") with
-                        | Some token, Some cookie ->
-                            // verify they match
-                            if token = cookie then
-                                // pass through to next handler
-                                // if GET
-                                if ctx.Request.Method = HttpMethods.Get then
-                                    // check asset version
-                                    match ctx.Request.Headers.InertiaVersion with
-                                    | Some a when a <> v ->
-                                        return! x.ForceRefresh(url) next ctx
-                                    // versions match so pass through to json response
-                                    | _ -> 
-                                        return! x.ReturnJsonPage page next ctx
-                                // Other method type so check if redirect
-                                else
-                                    if
-                                        [ HttpMethods.Put ; HttpMethods.Patch; HttpMethods.Delete ] 
-                                            |> List.contains ctx.Request.Method && 
-                                        [ StatusCodes.Status301MovedPermanently; StatusCodes.Status302Found ] |> List.contains ctx.Response.StatusCode 
-                                    then
-                                        ctx.SetStatusCode StatusCodes.Status303SeeOther
-                                        return! next ctx
+                        let fireNextEvent =
+                            let pred = defaultArg x.NextSSE.nextPred true
+                            if pred && not ctx.Request.IsInertialSSE && partialReq ctx x.ComponentName |> fst |> not then
+                                match x.NextSSE.nextMsg with
+                                | Some nextFn ->
+                                    sse.OnNext(nextFn connectionId)
+                                | None -> ()
+                        
+                        
+                        // check if this request initiates from inertia
+                        if ctx.Request.IsInertial then
+                            // check header for token sent by client and for matching cookie set by server
+                            match ctx.Request.Headers.XSRFToken, ctx.GetCookieValue("XSRF-TOKEN") with
+                            | Some token, Some cookie ->
+                                // verify they match
+                                if token = cookie then
+                                    // pass through to next handler
+                                    // if GET
+                                    if ctx.Request.Method = HttpMethods.Get then
+                                        // check asset version against latest version in headers
+                                        match ctx.Request.Headers.InertialVersion with
+                                        | Some a when a <> version ->
+                                            return! x.ForceRefresh(url) next ctx
+                                        // versions match so pass through to json response
+                                        | _ -> 
+                                            fireNextEvent
+                                            return! x.ReturnJsonPage page next ctx
+                                    // Other method type so check if redirect
                                     else
-                                        return! x.ReturnJsonPage page next ctx
-                            else
-                                // clear response, set 403 status and return early
-                                return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
-                        | _ ->
-                            return! (clearResponse >=> setStatusCode StatusCodes.Status419AuthenticationTimeout) earlyReturn ctx
-                    else
-                        let antiFrg = ctx.GetService<IAntiforgery>()
-                        // this is true if request uses a safe HTTP method or contains a valid antiforgery token
-                        let! isValidServerCSRF = antiFrg.IsRequestValidAsync ctx
-                        if isValidServerCSRF then
-                            // if we have valid CSRF tokens (cookies and headers match) then set CSRF token cookie for client calls to mirror back via header
-                            let tokenSet = ctx.GetService<IAntiforgery>().GetTokens(ctx)
-                            let options = CookieOptions()
-                            options.SameSite <- SameSiteMode.Strict
-                            ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
-                            // pass through json as string to body data-page tag in full page handler
-                            return! (page.toJson() |> x.RootView |> htmlView) next ctx
-                        else 
-                            return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
+                                        if
+                                            [ HttpMethods.Put ; HttpMethods.Patch; HttpMethods.Delete ] 
+                                                |> List.contains ctx.Request.Method && 
+                                            [ StatusCodes.Status301MovedPermanently; StatusCodes.Status302Found ] |> List.contains ctx.Response.StatusCode 
+                                        then
+                                            ctx.SetStatusCode StatusCodes.Status303SeeOther
+                                            return! next ctx
+                                        else
+                                            fireNextEvent
+                                            return! x.ReturnJsonPage page next ctx
+                                else
+                                    // clear response, set 403 status and return early
+                                    return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
+                            | _ ->
+                                return! (clearResponse >=> setStatusCode StatusCodes.Status419AuthenticationTimeout) earlyReturn ctx
+                        else
+                            let antiFrg = ctx.GetService<IAntiforgery>()
+                            // this is true if request uses a safe HTTP method or contains a valid antiforgery token
+                            let! isValidServerCSRF = antiFrg.IsRequestValidAsync ctx
+                            if isValidServerCSRF then
+                                // if we have valid CSRF tokens (cookies and headers match) then set CSRF token cookie for client calls to mirror back via header
+                                let tokenSet = ctx.GetService<IAntiforgery>().GetTokens(ctx)
+                                let options = CookieOptions()
+                                options.SameSite <- SameSiteMode.Strict
+                                ctx.Response.Cookies.Append("XSRF-TOKEN",tokenSet.CookieToken,options)
+                                
+                                fireNextEvent
+                                // pass through json as string to body data-page tag in full page handler
+                                return! (page.toJson() |> x.RootView |> htmlView) next ctx
+                            else 
+                                return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
                 }
-        // Method to do change the SSE json message and trigger SSE event client-side
-        member x.BroadcastSSE(nextMessage,?broadcastPredicate) =
-            let pred = defaultArg broadcastPredicate true
-            if pred then
-                sse.OnNext(nextMessage)
-            x
+
             
         /// Public rendering function that calls HttpHandler compatible with Giraffe pipeline
         member x.Render (?url:string,?version:string) =

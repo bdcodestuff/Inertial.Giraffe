@@ -1,5 +1,6 @@
 namespace Inertial.Giraffe
 
+open Giraffe
 open Microsoft.FSharp.Core
 open Newtonsoft.Json
 open Microsoft.AspNetCore.Http
@@ -106,22 +107,25 @@ module Types =
     type IHeaderDictionary with
       
         /// Inertia Request
-        member this.Inertia with get () = hdr this "X-Inertia" |> Option.map bool.Parse
+        member this.Inertial with get () = hdr this "X-Inertial" |> Option.map bool.Parse
 
+        /// Inertia Request
+        member this.InertialSSE with get () = hdr this "X-Inertial-SSE-Response" |> Option.map bool.Parse
+        
         /// Inertia Version
-        member this.InertiaVersion with get () = hdr this "X-Inertia-Version"
+        member this.InertialVersion with get () = hdr this "X-Inertial-Version"
 
         /// Inertia Location
-        member this.InertiaLocation with get () = hdr this "X-Inertia-Location"
+        member this.InertialLocation with get () = hdr this "X-Inertial-Location"
 
         /// Inertia Partial Data
-        member this.InertiaPartialData with get () = hdr this "X-Inertia-Partial-Data"
+        member this.InertialPartialData with get () = hdr this "X-Inertial-Partial-Data"
         
         /// Inertia Id from client
-        member this.InertiaId with get () = hdr this "X-Inertia-Id"
+        member this.InertialId with get () = hdr this "X-Inertial-Id"
         
         /// Inertia Partial Component
-        member this.InertiaPartialComponent with get () = hdr this "X-Inertia-Partial-Component"
+        member this.InertialPartialComponent with get () = hdr this "X-Inertial-Partial-Component"
 
         /// Get the token from request set by axios when XSRF-COOKIE is present
         member this.XSRFToken with get () = hdr this "X-XSRF-TOKEN"
@@ -133,8 +137,12 @@ module Types =
     type HttpRequest with
 
         /// Check whether this request was initiated from Inertia
-        member this.IsInertia with get () = this.Headers.Inertia |> Option.defaultValue false
-        member this.InertiaId with get () = this.Headers.InertiaId
+        member this.IsInertial with get () = this.Headers.Inertial |> Option.defaultValue false
+        
+        /// Check whether this request originated as an SSE reload response from Inertia
+        member this.IsInertialSSE with get () = this.Headers.InertialSSE |> Option.defaultValue false
+        
+        member this.InertialId with get () = this.Headers.InertialId |> Option.defaultValue (ShortGuid.fromGuid(System.Guid.NewGuid()))
         //member this.InertiaIdOrNew with get () = this.Headers.InertiaId |> Option.defaultValue (Guid.NewGuid().ToString())
             
     type FableRemotingJsonSerializer() =

@@ -50,14 +50,11 @@ let (|UC|_|) e o =
 let recordValueEvaluator (memberName: string) (r: obj) (filter: string array) =
     async {
         match r with
-        | UC <@ Choice1Of2 @> [v] when filter |> Array.contains memberName ->
+        | UC <@ Choice1Of2 @> [v] when filter |> Array.contains memberName || filter |> Array.contains "*" ->
             // A -> Async<B>
             let fsharpFuncArgs = r.GetType().GetGenericArguments()
             let asyncOfB = fsharpFuncArgs.[0]
-            
-            // A
-            // let typeA = asyncOfB.GetGenericArguments().[0]
-                                          
+                                    
             // B
             let typeBFromAsyncOfB = asyncOfB.GetGenericArguments().[0]
             
@@ -105,7 +102,21 @@ let recordEvaluator (r: obj) filter isPartial =
                     |> Array.zip recordTypes
                     |> Array.map (fun (t,o) -> Expr.Value(o,t)) |> List.ofArray
                 return merged
-
+            | _ when not isPartial ->
+                let! evaluatedRecord =
+                    FSharpValue.GetRecordFields(r)
+                    |> Array.zip recordMemberNames
+                    |> Array.map (fun (m,o) ->
+                        async {
+                            let! r = recordValueEvaluator m o [|"*"|]
+                            return r
+                        } )
+                    |> Async.Parallel
+                let merged =
+                    evaluatedRecord
+                    |> Array.zip recordTypes
+                    |> Array.map (fun (t,o) -> Expr.Value(o,t)) |> List.ofArray
+                return merged
             | _ ->
                 let record =
                     FSharpValue.GetRecordFields(r)
