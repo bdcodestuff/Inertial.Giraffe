@@ -76,7 +76,7 @@ let recordValueEvaluator (memberName: string) (r: obj) (filter: string array) =
         | _ -> return r
     }
     
-let recordEvaluator (r: obj) filter isPartial =
+let recordEvaluator (r: obj) filter isPartial isFull =
     async {
         let typ = r.GetType()
         let recordTypes =
@@ -86,23 +86,7 @@ let recordEvaluator (r: obj) filter isPartial =
             FSharpType.GetRecordFields(typ)
             |> Array.map (_.Name)
         if (FSharpType.IsRecord typ) then
-            match filter with
-            | f when isPartial ->
-                let! evaluatedRecord =
-                    FSharpValue.GetRecordFields(r)
-                    |> Array.zip recordMemberNames
-                    |> Array.map (fun (m,o) ->
-                        async {
-                            let! r = recordValueEvaluator m o f
-                            return r
-                        } )
-                    |> Async.Parallel
-                let merged =
-                    evaluatedRecord
-                    |> Array.zip recordTypes
-                    |> Array.map (fun (t,o) -> Expr.Value(o,t)) |> List.ofArray
-                return merged
-            | _ when not isPartial ->
+            if isFull then
                 let! evaluatedRecord =
                     FSharpValue.GetRecordFields(r)
                     |> Array.zip recordMemberNames
@@ -117,21 +101,39 @@ let recordEvaluator (r: obj) filter isPartial =
                     |> Array.zip recordTypes
                     |> Array.map (fun (t,o) -> Expr.Value(o,t)) |> List.ofArray
                 return merged
-            | _ ->
-                let record =
-                    FSharpValue.GetRecordFields(r)
-                    |> Array.zip recordTypes
-                    |> Array.map (fun (t,o) -> Expr.Value(o,t)) |> List.ofArray
-                return record
+            else
+                match filter with
+                | f when isPartial ->
+                    let! evaluatedRecord =
+                        FSharpValue.GetRecordFields(r)
+                        |> Array.zip recordMemberNames
+                        |> Array.map (fun (m,o) ->
+                            async {
+                                let! r = recordValueEvaluator m o f
+                                return r
+                            } )
+                        |> Async.Parallel
+                    let merged =
+                        evaluatedRecord
+                        |> Array.zip recordTypes
+                        |> Array.map (fun (t,o) -> Expr.Value(o,t)) |> List.ofArray
+                    return merged
+
+                | _ ->
+                    let record =
+                        FSharpValue.GetRecordFields(r)
+                        |> Array.zip recordTypes
+                        |> Array.map (fun (t,o) -> Expr.Value(o,t)) |> List.ofArray
+                    return record
         else
             return failwith "Provided props do not have required format of union type of records"
     }
     
-let evaluated propsToEval filter isPartial =
+let evaluated propsToEval filter isPartial isFull =
     async {
         let eval q = LeafExpressionConverter.EvaluateQuotation q
         let innerProps, outerPropsUCType = innerRecord propsToEval
-        let! evaluatedInnerProps = (recordEvaluator innerProps filter isPartial)
+        let! evaluatedInnerProps = (recordEvaluator innerProps filter isPartial isFull)
         // debug
         // evaluatedInnerProps |> List.iter (fun x -> printfn $"{x.Type.Name}")
         let newRcdExpr = Expr.NewRecord( innerProps.GetType(), evaluatedInnerProps )

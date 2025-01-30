@@ -29,8 +29,15 @@ module Core =
     | UserIdIsOneOf of string array
         
     type PropsToEval =
-    | EvalAllProps
-    | OnlyEvalProps of string array
+    | Eager
+    | Lazy
+    | EagerOnly of string array
+       
+    type ReloadOnMount =
+        {
+            shouldReload : bool
+            propsToEval : PropsToEval option
+        }
        
     type Predicates =
         {
@@ -54,7 +61,7 @@ module Core =
             firedOn : DateTime
         }
         static member empty () =
-            { id = Guid.Empty ; title = ""; connectionId = ""; predicates = { predicates = [||]; propsToEval = EvalAllProps  } ; origin = ""; firedOn = DateTime.UtcNow }.toJson()
+            { id = Guid.Empty ; title = ""; connectionId = ""; predicates = { predicates = [||]; propsToEval = Lazy  } ; origin = ""; firedOn = DateTime.UtcNow }.toJson()
         
         /// Create a new SSE event that is sent to client as json for decoding
         static member create (title:string) (propsToEvaluate: PropsToEval) (ifPredicatesMatch : RealTimePredicates list) url cid =
@@ -78,7 +85,7 @@ module Core =
             title : string
             props : 'Props option
             refreshOnBack : bool
-            reloadOnMount : {| shouldReload : bool; propsToEval: PropsToEval option |}
+            reloadOnMount : ReloadOnMount
             realTime : bool
             shared : 'Shared
         }    
@@ -100,6 +107,15 @@ module Core =
                 [||]
                 
         (isPartialReq, filter)
+       
+    let private fullReq (ctx:HttpContext) (componentName:string) =
+        // Check if full data request with specified component name
+        let isFullReq =
+            match ctx.Request.Headers.InertialFullComponent with
+            | Some comp when comp = componentName -> true
+            | _ -> false
+                
+        isFullReq
                
     let private isSSE (ctx:HttpContext) = ctx.Request.IsInertialSSE
     
@@ -190,7 +206,7 @@ module Core =
         member val private Props = props with get, set
         member val private RootView = rootView with get, set
         member val private RefreshOnBack = false with get, set
-        member val private ReloadOnMount = {| shouldReload = false; propsToEval = None |} with get, set
+        member val private ReloadOnMount = { shouldReload = false; propsToEval = None } with get, set // default is no reload
         member val private RealTime = true with get, set
         member val private ModifyShareDuringResponse = (false,id) with get, set
         
@@ -204,10 +220,15 @@ module Core =
             x.RefreshOnBack <- true
             x
             
-        /// Indicate that this component should trigger the client side router to perform a partial data reload of itself after it first loads, evaluating all the fields in the Prop record type (including functions) OR just those fieldnames specified in toGet.
+        /// Indicate that this component should trigger the client side router to perform a partial data reload of itself after it first loads, evaluating just those fieldnames specified in toGet.
         /// This is the main mechanism used to achieve asynchronous data loading on the server.  Props that have an Async function type signature don't get evaluated on first load, but do get evaluated when the component reloads.
-        member x.SetReloadOnMount(?toGet: PropsToEval) =
-            x.ReloadOnMount <- {| shouldReload = true; propsToEval = Some <| defaultArg toGet EvalAllProps |}
+        member x.SetReloadOnMount(toGet: string list) =
+            let data = Array.ofList toGet
+            match data with
+            | [||] ->
+                x.ReloadOnMount <- { shouldReload = true; propsToEval = Some Lazy }
+            | a ->
+                x.ReloadOnMount <- { shouldReload = true; propsToEval = Some <| EagerOnly a }
             x
         
         /// Components listen for server-sent events at "/sse" by default; Calling this indicates that this component should not listen client-side.
@@ -253,6 +274,7 @@ module Core =
                         let version = defaultArg version "1" // use default of 1
                         let url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
                         let isPartial, filter = partialReq ctx x.ComponentName
+                        let isFull = fullReq ctx x.ComponentName
                         let isSSE = ctx.Request.IsInertialSSE
                         let isReload = ctx.Request.IsInertialReload
                         
@@ -263,7 +285,8 @@ module Core =
                             | None -> ctx.Request.InertialId // hit this branch on full page refresh; will be sent to client then back again in header on XML calls
                         
                         // Evaluate asynchronous props
-                        let! propResultAsync = evaluated x.Props filter isPartial
+                        let! propResultAsync = evaluated x.Props filter isPartial isFull
+                        
                         // Cast back tp 'Props option type
                         let propResult = propResultAsync :?> 'Props |> Some
 
@@ -271,8 +294,17 @@ module Core =
                         
                         // Gets the shared props
                         let! sharedProps = shareFn ctx
+                        
                         // Modifies the shared props based on user-specified function
                         let shared = if shouldModifyShare then withFn sharedProps else sharedProps
+                        
+                        let reloadOnMount : ReloadOnMount =
+                            if isPartial then // eager for specified props
+                                { shouldReload = true; propsToEval = Some <| EagerOnly filter }
+                            else if isFull then // eager
+                                { shouldReload = false; propsToEval = None }
+                            else // lazy or full page reload
+                                x.ReloadOnMount
                         
                         let page : Page<'Props,'Shared> = {
                             ``component``= x.ComponentName
@@ -283,12 +315,13 @@ module Core =
                             url=url
                             title=x.Title
                             refreshOnBack=x.RefreshOnBack
-                            reloadOnMount=x.ReloadOnMount
+                            reloadOnMount=reloadOnMount
                             realTime=x.RealTime 
                         }
 
                         let fireNextEvent () =
                             let matchesUserPred = defaultArg x.NextSSE.nextPred true
+                            // only fire SSE on certain conditions
                             if matchesUserPred && not isSSE && not isReload then
                                 match x.NextSSE.nextMsg with
                                 | Some nextFn ->

@@ -130,6 +130,8 @@ module Types =
         /// Inertial Partial Component
         member this.InertialPartialComponent with get () = hdr this "X-Inertial-Partial-Component"
         
+        /// Inertial Full Component
+        member this.InertialFullComponent with get () = hdr this "X-Inertial-Full-Component"
 
         /// Get the token from request set by axios when XSRF-COOKIE is present
         member this.XSRFToken with get () = hdr this "X-XSRF-TOKEN"
