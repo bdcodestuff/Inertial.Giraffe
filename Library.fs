@@ -243,10 +243,12 @@ module Core =
             x
                        
         // function to return JSON page handler
-        member private _.ReturnJsonPage (page:Page<'Props,'Shared>) : HttpHandler =
+        member private _.ReturnJsonPage (page:Page<'Props,'Shared>) isReload : HttpHandler =
             fun next ctx ->
                 task {
                     ctx.SetHttpHeader("X-Inertial","true")
+                    if isReload then
+                        ctx.SetHttpHeader("X-Inertial-Reload","true")
                     ctx.SetHttpHeader("Vary","accept")
                     return! json page next ctx
                 }
@@ -299,12 +301,15 @@ module Core =
                         let shared = if shouldModifyShare then withFn sharedProps else sharedProps
                         
                         let reloadOnMount : ReloadOnMount =
-                            if isPartial then // eager for specified props
-                                { shouldReload = true; propsToEval = Some <| EagerOnly filter }
-                            else if isFull then // eager
+                            if isReload then
                                 { shouldReload = false; propsToEval = None }
-                            else // lazy or full page reload
-                                x.ReloadOnMount
+                            else
+                                if isPartial then // eager only for specified props, reload needed
+                                    { shouldReload = true; propsToEval = Some <| EagerOnly filter }
+                                else if isFull then // eager for all, no need to reload
+                                    { shouldReload = false; propsToEval = None }
+                                else // if lazy or full page reload default to server-specified behavior
+                                    x.ReloadOnMount
                         
                         let page : Page<'Props,'Shared> = {
                             ``component``= x.ComponentName
@@ -347,7 +352,8 @@ module Core =
                                         // versions match so pass through to json response
                                         | _ -> 
                                             fireNextEvent()
-                                            return! x.ReturnJsonPage page next ctx
+                                            
+                                            return! x.ReturnJsonPage page isReload next ctx
                                     // Other method type so check if redirect
                                     else
                                         if
@@ -359,7 +365,7 @@ module Core =
                                             return! next ctx
                                         else
                                             fireNextEvent()
-                                            return! x.ReturnJsonPage page next ctx
+                                            return! x.ReturnJsonPage page isReload next ctx
                                 else
                                     // clear response, set 403 status and return early
                                     return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx
