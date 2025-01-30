@@ -304,11 +304,9 @@ module Core =
                             if isReload then
                                 { shouldReload = false; propsToEval = None }
                             else
-                                if isPartial then // eager only for specified props, reload needed
-                                    { shouldReload = true; propsToEval = Some <| EagerOnly filter }
-                                else if isFull then // eager for all, no need to reload
+                                if isPartial || isFull then // full eager load or partial eager load
                                     { shouldReload = false; propsToEval = None }
-                                else // if lazy or full page reload default to server-specified behavior
+                                else // if lazy or full page reload default to server-specified behavior for this component
                                     x.ReloadOnMount
                         
                         let page : Page<'Props,'Shared> = {

@@ -6,7 +6,7 @@
     <AssemblyName>Inertial.Giraffe</AssemblyName>
     <RootNamespace>Inertial.Giraffe</RootNamespace>
     <PackageId>Inertial.Giraffe</PackageId>
-    <Version>0.0.6</Version>
+    <Version>0.0.7</Version>
     <Authors>Bryan Macrie</Authors>
     <RepositoryUrl>https://github.com/bdcodestuff/Inertial.Giraffe</RepositoryUrl>
   </PropertyGroup>
