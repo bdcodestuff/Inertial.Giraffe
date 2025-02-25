@@ -331,7 +331,7 @@ module Core =
                         }
 
                         let fireNextEvent () =
-                            let matchesUserPred = defaultArg x.NextSSE.nextPred true
+                            let matchesUserPred = defaultArg x.NextSSE.nextPred false
                             // only fire SSE on certain conditions
                             if matchesUserPred && not isSSE && not isReload then
                                 match x.NextSSE.nextMsg with
