@@ -556,7 +556,8 @@
       "sources": {
         "/usr/local/share/dotnet/library-packs": {},
         "/usr/local/share/dotnet/sdk/9.0.102/FSharp/library-packs": {},
-        "https://api.nuget.org/v3/index.json": {}
+        "https://api.nuget.org/v3/index.json": {},
+        "https://nuget.pkg.github.com/bdcodestuff/index.json": {}
       },
       "frameworks": {
         "net9.0": {

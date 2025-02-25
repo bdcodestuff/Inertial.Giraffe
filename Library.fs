@@ -29,9 +29,9 @@ module Core =
     | UserIdIsOneOf of string array
         
     type PropsToEval =
-    | Eager
-    | Lazy
-    | EagerOnly of string array
+    | Eager // evaluate all async values before returning
+    | Lazy // evaluate all non-async values but purposely leave async unevaluated
+    | EagerOnly of string array // evaluate all non-async AND evaluate the async values with member name specified in the string array
        
     type ReloadOnMount =
         {
@@ -61,7 +61,14 @@ module Core =
             firedOn : DateTime
         }
         static member empty () =
-            { id = Guid.Empty ; title = ""; connectionId = ""; predicates = { predicates = [||]; propsToEval = Lazy  } ; origin = ""; firedOn = DateTime.UtcNow }.toJson()
+            {
+                id = Guid.Empty
+                title = ""
+                connectionId = ""
+                predicates = { predicates = [||]; propsToEval = Eager  }
+                origin = ""
+                firedOn = DateTime.UtcNow
+            }.toJson()
         
         /// Create a new SSE event that is sent to client as json for decoding
         static member create (title:string) (propsToEvaluate: PropsToEval) (ifPredicatesMatch : RealTimePredicates list) url cid =
@@ -226,7 +233,8 @@ module Core =
             let data = Array.ofList toGet
             match data with
             | [||] ->
-                x.ReloadOnMount <- { shouldReload = true; propsToEval = Some Lazy }
+                //x.ReloadOnMount <- { shouldReload = true; propsToEval = Some Lazy }
+                failwith "If SetReloadOnMount is specified the toGet array cannot be empty"
             | a ->
                 x.ReloadOnMount <- { shouldReload = true; propsToEval = Some <| EagerOnly a }
             x
