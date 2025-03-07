@@ -47,34 +47,37 @@ let (|UC|_|) e o =
             else None
       | _ -> failwith "The UC pattern can only be used against simple union cases"
       
-let recordValueEvaluator (memberName: string) (r: obj) (filter: string array) =
-    async {
-        match r with
-        | UC <@ Choice1Of2 @> [v] when filter |> Array.contains memberName || filter |> Array.contains "*" ->
-            // A -> Async<B>
-            let fsharpFuncArgs = r.GetType().GetGenericArguments()
-            let asyncOfB = fsharpFuncArgs.[0]
-                                    
-            // B
-            let typeBFromAsyncOfB = asyncOfB.GetGenericArguments().[0]
-            
-            
-            let asyncBoxer = typedefof<AsyncBoxer<_>>.MakeGenericType(typeBFromAsyncOfB)
-                             |> Activator.CreateInstance 
-                             :?> IAsyncBoxer
-                             
-            let choice2Boxer = typedefof<Choice2Boxer<_,_>>.MakeGenericType(fsharpFuncArgs)
-                             |> Activator.CreateInstance 
-                             :?> IChoice2Boxer
-                                                                     
-            let! asyncResult = asyncBoxer.BoxAsyncResult v
-            let choiceResult = Choice2Of2 asyncResult
-            let result = choice2Boxer.Reboxer choiceResult
-            
-            return result
+let recordValueEvaluator 
+    (memberName: string) 
+    (r: obj) 
+    (filter: string array) =
+        async {
+            match r with
+            | UC <@ Choice1Of2 @> [v] when filter |> Array.contains memberName || filter |> Array.contains "*" ->
+                // A -> Async<B>
+                let fsharpFuncArgs = r.GetType().GetGenericArguments()
+                let asyncOfB = fsharpFuncArgs.[0]
+                                        
+                // B
+                let typeBFromAsyncOfB = asyncOfB.GetGenericArguments().[0]
+                
+                
+                let asyncBoxer = typedefof<AsyncBoxer<_>>.MakeGenericType(typeBFromAsyncOfB)
+                                |> Activator.CreateInstance 
+                                :?> IAsyncBoxer
+                                
+                let choice2Boxer = typedefof<Choice2Boxer<_,_>>.MakeGenericType(fsharpFuncArgs)
+                                |> Activator.CreateInstance 
+                                :?> IChoice2Boxer
+                                                                        
+                let! asyncResult = asyncBoxer.BoxAsyncResult v
+                let choiceResult = Choice2Of2 asyncResult
+                let result = choice2Boxer.Reboxer choiceResult
+                
+                return result
 
-        | _ -> return r
-    }
+            | _ -> return r
+        }
     
 let recordEvaluator (r: obj) filter isPartial isFull =
     async {

@@ -2,6 +2,26 @@
   "version": 3,
   "targets": {
     "net9.0": {
+      "Fable.Core/4.1.0": {
+        "type": "package",
+        "compile": {
+          "lib/netstandard2.0/Fable.Core.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Fable.Core.dll": {
+            "related": ".xml"
+          }
+        },
+        "contentFiles": {
+          "contentFiles/any/any/_._": {
+            "buildAction": "None",
+            "codeLanguage": "any",
+            "copyToOutput": false
+          }
+        }
+      },
       "Fable.Remoting.Json/2.25.0": {
         "type": "package",
         "dependencies": {
@@ -32,7 +52,7 @@
           }
         }
       },
-      "FSharp.Core/8.0.401": {
+      "FSharp.Core/9.0.201": {
         "type": "package",
         "compile": {
           "lib/netstandard2.1/FSharp.Core.dll": {
@@ -142,6 +162,23 @@
           }
         }
       },
+      "Inertial.Lib/0.1.0": {
+        "type": "package",
+        "dependencies": {
+          "FSharp.Core": "9.0.101",
+          "Thoth.Json": "10.4.1"
+        },
+        "compile": {
+          "lib/netstandard2.0/Inertial.Lib.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Inertial.Lib.dll": {
+            "related": ".xml"
+          }
+        }
+      },
       "Microsoft.FSharpLu.Json/0.11.7": {
         "type": "package",
         "dependencies": {
@@ -212,10 +249,45 @@
         "build": {
           "buildTransitive/net6.0/System.Text.Json.targets": {}
         }
+      },
+      "Thoth.Json/10.4.1": {
+        "type": "package",
+        "dependencies": {
+          "FSharp.Core": "5.0.2",
+          "Fable.Core": "4.1.0"
+        },
+        "compile": {
+          "lib/netstandard2.0/Thoth.Json.dll": {
+            "related": ".xml"
+          }
+        },
+        "runtime": {
+          "lib/netstandard2.0/Thoth.Json.dll": {
+            "related": ".xml"
+          }
+        }
       }
     }
   },
   "libraries": {
+    "Fable.Core/4.1.0": {
+      "sha512": "NISAbAVGEcvH2s+vHLSOCzh98xMYx4aIadWacQdWPcQLploxpSQXLEe9SeszUBhbHa73KMiKREsH4/W3q4A4iA==",
+      "type": "package",
+      "path": "fable.core/4.1.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "README.md",
+        "content/CHANGELOG.md",
+        "contentFiles/any/netstandard2.0/CHANGELOG.md",
+        "fable.core.4.1.0.nupkg.sha512",
+        "fable.core.nuspec",
+        "fable_logo.png",
+        "lib/netstandard2.0/Fable.Core.dll",
+        "lib/netstandard2.0/Fable.Core.xml"
+      ]
+    },
     "Fable.Remoting.Json/2.25.0": {
       "sha512": "ycmxT5L7jUKLkSJ4uti+WiX1OU50UYhLLiFQwJpQzwPWpNbSXowPjUtGycl8G5429edzeIHGW/77hUlIAufiAg==",
       "type": "package",
@@ -255,15 +327,15 @@
         "paket-installmodel.cache"
       ]
     },
-    "FSharp.Core/8.0.401": {
-      "sha512": "pvmquLrs82m8WqWB49Gj+hsmnWURkUbc++pJ0P2NdrEv1ZVVrhDNjSiFNP4wW4HiTowwaRhjiBc5IKNV35Vf/A==",
+    "FSharp.Core/9.0.201": {
+      "sha512": "Ozq4T0ISTkqTYJ035XW/JkdDDaXofbykvfyVwkjLSqaDZ/4uNXfpf92cjcMI9lf9CxWqmlWHScViPh/4AvnWcw==",
       "type": "package",
-      "path": "fsharp.core/8.0.401",
+      "path": "fsharp.core/9.0.201",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "Icon.png",
-        "fsharp.core.8.0.401.nupkg.sha512",
+        "fsharp.core.9.0.201.nupkg.sha512",
         "fsharp.core.nuspec",
         "lib/netstandard2.0/FSharp.Core.dll",
         "lib/netstandard2.0/FSharp.Core.xml",
@@ -294,8 +366,7 @@
         "lib/netstandard2.1/ru/FSharp.Core.resources.dll",
         "lib/netstandard2.1/tr/FSharp.Core.resources.dll",
         "lib/netstandard2.1/zh-Hans/FSharp.Core.resources.dll",
-        "lib/netstandard2.1/zh-Hant/FSharp.Core.resources.dll",
-        "paket-installmodel.cache"
+        "lib/netstandard2.1/zh-Hant/FSharp.Core.resources.dll"
       ]
     },
     "FSharp.SystemTextJson/1.3.13": {
@@ -352,6 +423,21 @@
         "lib/netstandard2.0/Giraffe.ViewEngine.dll",
         "lib/netstandard2.0/Giraffe.ViewEngine.pdb",
         "lib/netstandard2.0/Giraffe.ViewEngine.xml"
+      ]
+    },
+    "Inertial.Lib/0.1.0": {
+      "sha512": "HKjQSz4P4jMLxIOuhubULVixRvwZjJxJo6V7REiKSk+HOJBVEJ1ZQdBG8d8gtp38l7RBIpjueDFM/+Kni5ElkA==",
+      "type": "package",
+      "path": "inertial.lib/0.1.0",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE",
+        "README.md",
+        "inertial.lib.0.1.0.nupkg.sha512",
+        "inertial.lib.nuspec",
+        "lib/netstandard2.0/Inertial.Lib.dll",
+        "lib/netstandard2.0/Inertial.Lib.xml"
       ]
     },
     "Microsoft.FSharpLu.Json/0.11.7": {
@@ -524,14 +610,35 @@
         "system.text.json.nuspec",
         "useSharedDesignerContext.txt"
       ]
+    },
+    "Thoth.Json/10.4.1": {
+      "sha512": "hs76/uO+gHhvnlaxQDqbpUX2Y0L97ilEZ1Nx+LA4D6N7fuAYJmNwQWZB/KQLBE7wIeWK5oXMFHCuKdImSrF1Bg==",
+      "type": "package",
+      "path": "thoth.json/10.4.1",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "LICENSE.txt",
+        "README.md",
+        "fable/Decode.fs",
+        "fable/Encode.fs",
+        "fable/Extra.fs",
+        "fable/Thoth.Json.fsproj",
+        "fable/Types.fs",
+        "lib/netstandard2.0/Thoth.Json.dll",
+        "lib/netstandard2.0/Thoth.Json.xml",
+        "thoth.json.10.4.1.nupkg.sha512",
+        "thoth.json.nuspec"
+      ]
     }
   },
   "projectFileDependencyGroups": {
     "net9.0": [
       "FSharp.Control.Reactive >= 5.0.5",
-      "FSharp.Core >= 8.0.401",
+      "FSharp.Core >= 9.0.201",
       "Fable.Remoting.Json >= 2.25.0",
       "Giraffe >= 7.0.2",
+      "Inertial.Lib >= 0.1.0",
       "Microsoft.FSharpLu.Json >= 0.11.7"
     ]
   },
@@ -539,7 +646,7 @@
     "/Users/bdmacrie/.nuget/packages/": {}
   },
   "project": {
-    "version": "0.0.7",
+    "version": "0.0.8",
     "restore": {
       "projectUniqueName": "/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/Inertial.Giraffe.fsproj",
       "projectName": "Inertial.Giraffe",
@@ -584,7 +691,7 @@
           "FSharp.Core": {
             "include": "Runtime, Compile, Build, Native, Analyzers, BuildTransitive",
             "target": "Package",
-            "version": "[8.0.401, )",
+            "version": "[9.0.201, )",
             "generatePathProperty": true
           },
           "Fable.Remoting.Json": {
@@ -595,6 +702,11 @@
           "Giraffe": {
             "target": "Package",
             "version": "[7.0.2, )",
+            "generatePathProperty": true
+          },
+          "Inertial.Lib": {
+            "target": "Package",
+            "version": "[0.1.0, )",
             "generatePathProperty": true
           },
           "Microsoft.FSharpLu.Json": {

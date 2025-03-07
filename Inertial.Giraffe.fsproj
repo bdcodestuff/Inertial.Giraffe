@@ -6,7 +6,7 @@
     <AssemblyName>Inertial.Giraffe</AssemblyName>
     <RootNamespace>Inertial.Giraffe</RootNamespace>
     <PackageId>Inertial.Giraffe</PackageId>
-    <Version>0.0.8</Version>
+    <Version>0.1.0</Version>
     <Authors>Bryan Macrie</Authors>
     <RepositoryUrl>https://github.com/bdcodestuff/Inertial.Giraffe</RepositoryUrl>
   </PropertyGroup>
@@ -24,6 +24,7 @@
   <ItemGroup>
     <Compile Include="FableJson.fs" />
     <Compile Include="Types.fs" />
+    <Compile Include="UrlMap.fs" />
     <Compile Include="Reflection.fs" />
     <Compile Include="Library.fs" />
     <Content Include="README.md" />
@@ -34,7 +35,8 @@
     <PackageReference Include="Fable.Remoting.Json" Version="2.25.0" />
     <PackageReference Include="FSharp.Control.Reactive" Version="5.0.5" />
     <PackageReference Include="Giraffe" Version="7.0.2" />
-    <PackageReference Update="FSharp.Core" Version="8.0.401" />    
+    <PackageReference Update="FSharp.Core" Version="9.0.201" />    
+    <PackageReference Include="Inertial.Lib" Version="0.1.0" />    
     <PackageReference Include="Microsoft.FSharpLu.Json" Version="0.11.7" />    
   </ItemGroup>
 

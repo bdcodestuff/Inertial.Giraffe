@@ -138,6 +138,12 @@ module Types =
 
         /// Get the referer
         member this.TryGetReferer with get () = hdr this "Referer"
+        
+        /// Inertial CacheStorage
+        member this.InertialCacheStorage with get () = hdr this "X-Inertial-CacheStorage"
+        
+        /// Inertial CacheRetrieval
+        member this.InertialCacheRetrieval with get () = hdr this "X-Inertial-CacheRetrieval"
 
     /// Extensions for the request object
     type HttpRequest with

@@ -17,87 +17,96 @@ open Types
 open Giraffe
 open Giraffe.ViewEngine
 open Reflection
+open Inertial.Lib.Types
 
 [<AutoOpen>]
 module Core =
     
-    
-    type RealTimePredicates =
-    | ComponentIsOneOf of string array
-    | ComponentIsAnyExcept of string array
-    | ComponentIsAny
-    | UserIdIsOneOf of string array
-        
-    type PropsToEval =
-    | Eager // evaluate all async values before returning
-    | Lazy // evaluate all non-async values but purposely leave async unevaluated
-    | EagerOnly of string array // evaluate all non-async AND evaluate the async values with member name specified in the string array
-       
-    type ReloadOnMount =
-        {
-            shouldReload : bool
-            propsToEval : PropsToEval option
-        }
-       
-    type Predicates =
-        {
-            predicates : RealTimePredicates array
-            propsToEval : PropsToEval
-        }
-        
     type NextSSE<'SSE> =
         {
-            nextMsg : Option<string -> string -> 'SSE>
+            nextMsg : Option<string -> string option -> 'SSE>
             nextPred : bool option
         }
         
-    type InertialSSEEvent =
+    let emptySSERecord () =
         {
-            id : Guid
-            title : string
-            connectionId: string
-            predicates : Predicates
-            origin : string 
-            firedOn : DateTime
+            id = Guid.Empty
+            title = ""
+            connectionId = None
+            predicates = { predicates = [||]; propsToEval = Eager  }
+            origin = ""
+            firedOn = DateTime.UtcNow
+            cacheStorage = CacheStorage.StoreAll
+            cacheRetrieval = CacheRetrieval.SkipCache            
         }
-        static member empty () =
-            {
-                id = Guid.Empty
-                title = ""
-                connectionId = ""
-                predicates = { predicates = [||]; propsToEval = Eager  }
-                origin = ""
-                firedOn = DateTime.UtcNow
-            }.toJson()
         
-        /// Create a new SSE event that is sent to client as json for decoding
-        static member create (title:string) (propsToEvaluate: PropsToEval) (ifPredicatesMatch : RealTimePredicates list) url cid =
-            {
-                id = Guid.NewGuid()
-                title = title
-                connectionId = cid
-                predicates = { predicates = (Array.ofList ifPredicatesMatch) ; propsToEval = propsToEvaluate }
-                origin = url
-                firedOn = DateTime.UtcNow
-            }.toJson()
-            
-        member x.toJson() = JsonConvert.SerializeObject(x,converters=[|fableConverter|])
-        
-    type Page<'Props,'Shared> =
+    let sseToJson (sse:InertialSSEEvent) = JsonConvert.SerializeObject(sse,converters=[|fableConverter|])
+    
+    let emptySSE () = emptySSERecord () |> sseToJson
+    
+    let createSSE
+        (title:string)
+        (propsToEvaluate: PropsToEval)
+        (ifPredicatesMatch : RealTimePredicates list)
+        (cacheStorage : CacheStorage option)
+        (cacheRetrieval : CacheRetrieval option)
+        url cid =
         {
-            ``component`` : string
-            version : string
-            connectionId: string
-            url : string
-            title : string
-            props : 'Props option
-            refreshOnBack : bool
-            reloadOnMount : ReloadOnMount
-            realTime : bool
-            shared : 'Shared
-        }    
-        member x.toJson() =
-            JsonConvert.SerializeObject(x,converters=[|fableConverter|])
+            id = Guid.NewGuid()
+            title = title
+            connectionId = cid
+            predicates = { predicates = (Array.ofList ifPredicatesMatch) ; propsToEval = propsToEvaluate }
+            origin = url
+            firedOn = DateTime.UtcNow
+            cacheStorage = defaultArg cacheStorage StoreAll
+            cacheRetrieval = defaultArg cacheRetrieval SkipCache 
+        }
+        |>  sseToJson
+        
+    let pageToJson (page:PageObj<'Props,'Shared>) = JsonConvert.SerializeObject(page,converters=[|fableConverter|])
+    
+    let private getCacheStorage (ctx:HttpContext) =
+        // Check if partial data request with specified component name
+        let cacheStorage =
+            match ctx.Request.Headers.InertialCacheStorage with
+            | Some cacheStorage ->
+                let parts =
+                    cacheStorage.Split(' ')
+                match parts with
+                | [|"StoreAll"|] -> Some StoreAll
+                | [|"StoreNone"|] -> Some StoreNone
+                | [|"StoreToCache"; a|] ->
+                    let arr =
+                        a.Split(',') 
+                        |> Array.filter (fun x -> String.IsNullOrEmpty x |> not)
+                        |> Array.map (_.Trim())
+                    StoreToCache arr |> Some
+                | _ -> failwith $"could not parse CacheStorage header: {cacheStorage}"
+            | _ ->
+                None
+                
+        cacheStorage
+    
+    let private getCacheRetrieval (ctx:HttpContext) =
+        // Check if partial data request with specified component name
+        let cacheRetrieval =
+            match ctx.Request.Headers.InertialCacheRetrieval with
+            | Some cacheRetrieval ->
+                let parts =
+                    cacheRetrieval.Split(' ')
+                match parts with
+                | [|"SkipCache"|] -> Some SkipCache
+                | [|"CheckForCached"; a|] ->
+                    let arr =
+                        a.Split(',') 
+                        |> Array.filter (fun x -> String.IsNullOrEmpty x |> not)
+                        |> Array.map (_.Trim())
+                    CheckForCached arr |> Some
+                | _ -> failwith $"could not parse CacheRetrieval header: {cacheRetrieval}"
+            | _ ->
+                None
+                
+        cacheRetrieval
     
     
     let private partialReq (ctx:HttpContext) (componentName:string) =
@@ -127,7 +136,7 @@ module Core =
     let private isSSE (ctx:HttpContext) = ctx.Request.IsInertialSSE
     
     let private isReload (ctx:HttpContext) = ctx.Request.IsInertialReload
-    
+        
     /// <summary>
     /// Inertia Options Class
     /// </summary>
@@ -168,7 +177,9 @@ module Core =
     /// Inertia Singleton Base Class
     /// </summary>
     /// <returns>Inertia object</returns>
-    type Inertia<'Props,'Shared,'SSE> (options: InertiaOptions, shareFn: HttpContext -> Task<'Shared>, sseInit: 'SSE) =
+    type Inertia<'Props,'Shared,'SSE> (options: InertiaOptions, urlMap: UrlMap.RouteData list, shareFn: HttpContext -> Task<'Shared>, sseInit: 'SSE) =
+        
+        member val UrlMap = urlMap |> UrlMap.convertToUrlComponentMap with get, set
         
         //member val Resolver = Reflection.resolver
         member val ShareFn = shareFn with get, set
@@ -194,6 +205,7 @@ module Core =
                 title = defaultArg title componentName, // if title is not specified default to using the component name
                 sse=x.SSE,
                 shareFn=x.ShareFn,
+                urlMap=x.UrlMap,
                 rootView = x.RootView)
           
     and InertiaResponse<'Props,'Shared, 'SSE> (
@@ -202,8 +214,11 @@ module Core =
         sse:ISubject<'SSE>,
         props:'Props option,
         shareFn,
+        urlMap:(string * string) list,
         rootView:string->XmlNode) =        
         member val private ComponentName = componentName
+        
+        member val private UrlMap = urlMap
         
         member val private NextSSE : NextSSE<'SSE> =
             { nextMsg = None ; nextPred = None } with get, set        
@@ -213,7 +228,8 @@ module Core =
         member val private Props = props with get, set
         member val private RootView = rootView with get, set
         member val private RefreshOnBack = false with get, set
-        member val private ReloadOnMount = { shouldReload = false; propsToEval = None } with get, set // default is no reload
+        // default is no reload, no storage to cache and no check of cache
+        member val private ReloadOnMount = { shouldReload = false; propsToEval = None; cacheStorage = None; cacheRetrieval = None } with get, set 
         member val private RealTime = true with get, set
         member val private ModifyShareDuringResponse = (false,id) with get, set
         
@@ -229,14 +245,17 @@ module Core =
             
         /// Indicate that this component should trigger the client side router to perform a partial data reload of itself after it first loads, evaluating just those fieldnames specified in toGet.
         /// This is the main mechanism used to achieve asynchronous data loading on the server.  Props that have an Async function type signature don't get evaluated on first load, but do get evaluated when the component reloads.
-        member x.SetReloadOnMount(toGet: string list) =
+        member x.SetReloadOnMount(
+            toGet: string list, 
+            ?cacheStorage: CacheStorage, 
+            ?cacheRetrieval: CacheRetrieval) =
             let data = Array.ofList toGet
             match data with
             | [||] ->
                 //x.ReloadOnMount <- { shouldReload = true; propsToEval = Some Lazy }
                 failwith "If SetReloadOnMount is specified the toGet array cannot be empty"
             | a ->
-                x.ReloadOnMount <- { shouldReload = true; propsToEval = Some <| EagerOnly a }
+                x.ReloadOnMount <- { shouldReload = true; propsToEval = Some <| EagerOnly a ; cacheStorage = cacheStorage; cacheRetrieval = cacheRetrieval }
             x
         
         /// Components listen for server-sent events at "/sse" by default; Calling this indicates that this component should not listen client-side.
@@ -251,7 +270,7 @@ module Core =
             x
                        
         // function to return JSON page handler
-        member private _.ReturnJsonPage (page:Page<'Props,'Shared>) isReload : HttpHandler =
+        member private _.ReturnJsonPage (page:PageObj<'Props,'Shared>) isReload : HttpHandler =
             fun next ctx ->
                 task {
                     ctx.SetHttpHeader("X-Inertial","true")
@@ -272,7 +291,7 @@ module Core =
                 }
               
         // Method to do change the SSE json message and trigger SSE event client-side
-        member x.BroadcastSSE(nextMessage:string -> string -> 'SSE,?broadcastPredicate:bool) =
+        member x.BroadcastSSE(nextMessage:string -> string option -> 'SSE, ?broadcastPredicate:bool) =
             x.NextSSE <- { nextMsg = Some nextMessage; nextPred = broadcastPredicate }
             x
                 
@@ -285,14 +304,16 @@ module Core =
                         let url = defaultArg url (ctx.Request.GetEncodedPathAndQuery())
                         let isPartial, filter = partialReq ctx x.ComponentName
                         let isFull = fullReq ctx x.ComponentName
+                        // is response the result of a server-sent event action
                         let isSSE = ctx.Request.IsInertialSSE
+                        // is response the result of a reload request
                         let isReload = ctx.Request.IsInertialReload
                         
                         // check for client side id passed in via header
                         let connectionId =
                             match connectionId with
-                            | Some serverId -> serverId
-                            | None -> ctx.Request.InertialId // hit this branch on full page refresh; will be sent to client then back again in header on XML calls
+                            | Some serverId -> Some serverId
+                            | None -> Some ctx.Request.InertialId // hit this branch on full page refresh; will be sent to client then back again in header on XML calls
                         
                         // Evaluate asynchronous props
                         let! propResultAsync = evaluated x.Props filter isPartial isFull
@@ -308,30 +329,52 @@ module Core =
                         // Modifies the shared props based on user-specified function
                         let shared = if shouldModifyShare then withFn sharedProps else sharedProps
                         
+                        let cacheStorage =
+                            match getCacheStorage ctx with
+                            | Some c -> Some c
+                            | None -> x.ReloadOnMount.cacheStorage
+                        
+                        let cacheRetrieval =
+                            match getCacheRetrieval ctx with
+                            | Some c -> Some c
+                            | None -> x.ReloadOnMount.cacheRetrieval
+                        
                         let reloadOnMount : ReloadOnMount =
                             if isReload then
-                                { shouldReload = false; propsToEval = None }
+                                {
+                                    shouldReload = false
+                                    propsToEval = None
+                                    cacheStorage = cacheStorage
+                                    cacheRetrieval = cacheRetrieval
+                                }
                             else
                                 if isPartial || isFull then // full eager load or partial eager load
-                                    { shouldReload = false; propsToEval = None }
+                                    {
+                                        shouldReload = false
+                                        propsToEval = None
+                                        cacheStorage = cacheStorage
+                                        cacheRetrieval = cacheRetrieval
+                                    }
                                 else // if lazy or full page reload default to server-specified behavior for this component
-                                    x.ReloadOnMount
+                                    { x.ReloadOnMount
+                                      with cacheStorage = cacheStorage ; cacheRetrieval = cacheRetrieval }
                         
-                        let page : Page<'Props,'Shared> = {
+                        let page : PageObj<'Props,'Shared> = {
                             ``component``= x.ComponentName
                             connectionId = connectionId
                             props=propResult
-                            shared=shared
+                            shared=Some shared
                             version=version
                             url=url
                             title=x.Title
                             refreshOnBack=x.RefreshOnBack
                             reloadOnMount=reloadOnMount
-                            realTime=x.RealTime 
+                            realTime=x.RealTime
+                            urlComponentMap = Array.ofList x.UrlMap
                         }
 
                         let fireNextEvent () =
-                            let matchesUserPred = defaultArg x.NextSSE.nextPred false
+                            let matchesUserPred = defaultArg x.NextSSE.nextPred true
                             // only fire SSE on certain conditions
                             if matchesUserPred && not isSSE && not isReload then
                                 match x.NextSSE.nextMsg with
@@ -390,7 +433,7 @@ module Core =
                                 
                                 fireNextEvent()
                                 // pass through json as string to body data-page tag in full page handler
-                                return! (page.toJson() |> x.RootView |> htmlView) next ctx
+                                return! (pageToJson page |> x.RootView |> htmlView) next ctx
                             else 
                                 return! (clearResponse >=> setStatusCode StatusCodes.Status403Forbidden) earlyReturn ctx  
                 }
@@ -427,8 +470,9 @@ module Core =
                 jsPath: string,
                 cssPath: string,
                 shareFn: HttpContext -> Task<'Shared>,
+                urlMap: UrlMap.RouteData list,  
                 sseInit:'SSE
             ) =
                 svc.AddSingleton<Json.ISerializer, FableRemotingJsonSerializer>() |> ignore
-                svc.TryAddSingleton<Inertia<'Props,'Shared,'SSE>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath),shareFn,sseInit))
+                svc.TryAddSingleton<Inertia<'Props,'Shared,'SSE>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath),urlMap,shareFn,sseInit))
                 svc
