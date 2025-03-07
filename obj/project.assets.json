@@ -162,7 +162,7 @@
           }
         }
       },
-      "Inertial.Lib/0.1.0": {
+      "Inertial.Lib/0.1.1": {
         "type": "package",
         "dependencies": {
           "FSharp.Core": "9.0.101",
@@ -425,16 +425,16 @@
         "lib/netstandard2.0/Giraffe.ViewEngine.xml"
       ]
     },
-    "Inertial.Lib/0.1.0": {
-      "sha512": "HKjQSz4P4jMLxIOuhubULVixRvwZjJxJo6V7REiKSk+HOJBVEJ1ZQdBG8d8gtp38l7RBIpjueDFM/+Kni5ElkA==",
+    "Inertial.Lib/0.1.1": {
+      "sha512": "B1SEo9nqMRM0tMC4d/L9EVgKdSu0vOAk6LFvt3vqie2eS48D0RioGUqIkfr7GW1Au3CSLgnp6RqhzfEmfezD+w==",
       "type": "package",
-      "path": "inertial.lib/0.1.0",
+      "path": "inertial.lib/0.1.1",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "LICENSE",
         "README.md",
-        "inertial.lib.0.1.0.nupkg.sha512",
+        "inertial.lib.0.1.1.nupkg.sha512",
         "inertial.lib.nuspec",
         "lib/netstandard2.0/Inertial.Lib.dll",
         "lib/netstandard2.0/Inertial.Lib.xml"
@@ -638,7 +638,7 @@
       "FSharp.Core >= 9.0.201",
       "Fable.Remoting.Json >= 2.25.0",
       "Giraffe >= 7.0.2",
-      "Inertial.Lib >= 0.1.0",
+      "Inertial.Lib >= 0.1.1",
       "Microsoft.FSharpLu.Json >= 0.11.7"
     ]
   },
@@ -646,7 +646,7 @@
     "/Users/bdmacrie/.nuget/packages/": {}
   },
   "project": {
-    "version": "0.0.8",
+    "version": "0.1.0",
     "restore": {
       "projectUniqueName": "/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/Inertial.Giraffe.fsproj",
       "projectName": "Inertial.Giraffe",
@@ -706,7 +706,7 @@
           },
           "Inertial.Lib": {
             "target": "Package",
-            "version": "[0.1.0, )",
+            "version": "[0.1.1, )",
             "generatePathProperty": true
           },
           "Microsoft.FSharpLu.Json": {

@@ -6,7 +6,7 @@
     <AssemblyName>Inertial.Giraffe</AssemblyName>
     <RootNamespace>Inertial.Giraffe</RootNamespace>
     <PackageId>Inertial.Giraffe</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>Bryan Macrie</Authors>
     <RepositoryUrl>https://github.com/bdcodestuff/Inertial.Giraffe</RepositoryUrl>
   </PropertyGroup>
@@ -36,7 +36,7 @@
     <PackageReference Include="FSharp.Control.Reactive" Version="5.0.5" />
     <PackageReference Include="Giraffe" Version="7.0.2" />
     <PackageReference Update="FSharp.Core" Version="9.0.201" />    
-    <PackageReference Include="Inertial.Lib" Version="0.1.0" />    
+    <PackageReference Include="Inertial.Lib" Version="0.1.1" />    
     <PackageReference Include="Microsoft.FSharpLu.Json" Version="0.11.7" />    
   </ItemGroup>
 
