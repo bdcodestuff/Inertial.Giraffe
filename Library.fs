@@ -96,6 +96,7 @@ module Core =
                     cacheRetrieval.Split(' ')
                 match parts with
                 | [|"SkipCache"|] -> Some SkipCache
+                | [|"CheckForAll"|] -> Some CheckForAll
                 | [|"CheckForCached"; a|] ->
                     let arr =
                         a.Split(',') 
@@ -118,6 +119,8 @@ module Core =
                 partialData.Split(',') 
                 |> Array.filter (fun x -> String.IsNullOrEmpty x |> not)
                 |> Array.map (_.Trim())
+            | None, Some comp when comp = componentName ->
+                true, [||]
             | _ ->
                 false,
                 [||]
@@ -229,7 +232,7 @@ module Core =
         member val private RootView = rootView with get, set
         member val private RefreshOnBack = false with get, set
         // default is no reload, no storage to cache and no check of cache
-        member val private ReloadOnMount = { shouldReload = false; propsToEval = None; cacheStorage = None; cacheRetrieval = None } with get, set 
+        member val private ReloadOnMount = { shouldReload = false; propsToEval = None; cacheStorage = CacheStorage.StoreNone; cacheRetrieval = CacheRetrieval.SkipCache } with get, set 
         member val private RealTime = true with get, set
         member val private ModifyShareDuringResponse = (false,id) with get, set
         
@@ -255,7 +258,12 @@ module Core =
                 //x.ReloadOnMount <- { shouldReload = true; propsToEval = Some Lazy }
                 failwith "If SetReloadOnMount is specified the toGet array cannot be empty"
             | a ->
-                x.ReloadOnMount <- { shouldReload = true; propsToEval = Some <| EagerOnly a ; cacheStorage = cacheStorage; cacheRetrieval = cacheRetrieval }
+                x.ReloadOnMount <- {
+                    shouldReload = true
+                    propsToEval = Some <| EagerOnly a
+                    cacheStorage = defaultArg cacheStorage x.ReloadOnMount.cacheStorage
+                    cacheRetrieval = defaultArg cacheRetrieval x.ReloadOnMount.cacheRetrieval
+                }
             x
         
         /// Components listen for server-sent events at "/sse" by default; Calling this indicates that this component should not listen client-side.
@@ -331,12 +339,12 @@ module Core =
                         
                         let cacheStorage =
                             match getCacheStorage ctx with
-                            | Some c -> Some c
+                            | Some c -> c
                             | None -> x.ReloadOnMount.cacheStorage
                         
                         let cacheRetrieval =
                             match getCacheRetrieval ctx with
-                            | Some c -> Some c
+                            | Some c -> c
                             | None -> x.ReloadOnMount.cacheRetrieval
                         
                         let reloadOnMount : ReloadOnMount =

@@ -1,15 +1,26 @@
 namespace Inertial.Giraffe
 
 open Giraffe
+open Inertial.Lib
 open Microsoft.FSharp.Core
 open Newtonsoft.Json
 open Microsoft.AspNetCore.Http
 open Microsoft.Extensions.Primitives
 open FableJson
+open System
 open System.IO
 open System.Threading.Tasks
+open Inertial.Lib.Types
+open Microsoft.FSharp.Core
+open Microsoft.FSharp.Reflection
+open Microsoft.FSharp.Quotations
+open Microsoft.FSharp.Quotations.DerivedPatterns
+open Microsoft.FSharp.Quotations.Patterns
+open FSharp.Linq.RuntimeHelpers
 
 module Types =
+    
+    
     
     type IAsyncBoxer =  
         abstract BoxAsyncResult : obj -> Async<obj>
@@ -68,11 +79,16 @@ module Types =
     
     type IChoice2Boxer =  
         abstract BoxChoice2Result : obj -> Choice<obj,obj>
+        //abstract BoxAsyncDataResult : obj -> AsyncDataName -> Choice<obj,obj>
         abstract Reboxer : obj -> obj
-
+        
+        abstract ReboxToAsyncData : obj -> AsyncDataName -> obj
+    
     type Choice2Boxer<'T,'U>() = 
             
         interface IChoice2Boxer with
+            
+            
             member this.Reboxer (boxedChoice2: obj) =
                 match boxedChoice2 with
                 // 'T,'U must be when initialized with the interface
@@ -87,6 +103,44 @@ module Types =
                         newChoice2
                     unwrappedGenericValueTUVfromChoice2
                 | _ -> failwith "Invalid boxed choice2 value"
+                
+            member this.ReboxToAsyncData (boxedChoice2: obj) (asyncDataType : AsyncDataName) : obj =
+                match boxedChoice2 with
+                // 'T,'U must be when initialized with the interface
+                | :? Choice<obj,obj> as unboxedChoice2OfGenericValuesTUV -> 
+                    let returnValue  =
+                        let newChoice =
+                            match unboxedChoice2OfGenericValuesTUV with
+                            | Choice1Of2 c1 -> Choice1Of2 (c1 :?> 'T)
+                            | Choice2Of2 c2 -> Choice2Of2 (c2 :?> 'U)
+                        
+                        // return boxed but still keeping type information 
+                        // about 'T in this class
+
+                        let innerType =
+                            match asyncDataType with
+                            | AsyncDataName.Choice2List | AsyncDataName.Choice2Option ->
+                                newChoice.GetType().GetGenericArguments().[0].GetGenericArguments().[0].GetGenericArguments().[0]
+                            | AsyncDataName.Choice2OptionList | AsyncDataName.Choice2ResultList ->
+                                newChoice.GetType().GetGenericArguments().[0].GetGenericArguments().[0].GetGenericArguments().[0].GetGenericArguments().[0]
+                                                
+                        let asyncDataResultT = typedefof<AsyncData<_>>.MakeGenericType [|innerType|]
+                        let expr =
+                          Expr.NewUnionCase(
+                            FSharpType.GetUnionCases(asyncDataResultT) |>
+                                function
+                                | [||] -> failwith "Provided input does not have required format"
+                                | b -> b
+                                       |> Array.pick (
+                                                function
+                                                | x when x.Name = asyncDataType.ToName() -> Some x
+                                                | _ -> None),  [ <@ newChoice @> ])
+                        let out = LeafExpressionConverter.EvaluateQuotation expr
+                        
+                        
+                        out
+                    returnValue
+                | _ -> failwith "Invalid boxed value: {}"
             
             member this.BoxChoice2Result(boxedChoice2: obj) : Choice<obj,obj> = 
                 match boxedChoice2 with
@@ -98,8 +152,45 @@ module Types =
                         // return boxed but still keeping type information 
                         // about 'T in this class
                     unwrappedGenericValueTUVfromChoice2
-                | _ -> failwith "Invalid boxed choice2 value"
+                | _ -> failwith $"Invalid boxed choice2 value {boxedChoice2}"
+          
+    type IAsyncDataBoxer =  
+        //abstract AsyncDataResult : obj -> AsyncData<obj>
+        abstract Reboxer : obj -> obj
     
+    type AsyncDataBoxer<'T>() = 
+            
+        interface IAsyncDataBoxer with
+            member this.Reboxer (boxedAsyncData: obj) =
+                match boxedAsyncData with
+                // 'T,'U must be when initialized with the interface
+                | :? AsyncData<Async<'T>> as unboxedAsyncDataOfGenericValueT -> 
+                    let unwrappedGenericValueTfromAsyncData  =
+                        let newAsyncData : AsyncData<'T> =
+                            match unboxedAsyncDataOfGenericValueT with
+                            | Choice2List c1 -> Choice2List (box c1 :?> AsyncChoice<List<'T>>)
+                            | Choice2Option c1 -> Choice2Option (box c1 :?> AsyncChoice<Option<'T>>)
+                            | Choice2OptionList c1 -> Choice2OptionList (box c1 :?> AsyncChoice<Option<List<'T>>>)
+                            | Choice2ResultList c1 -> Choice2ResultList (box c1 :?> AsyncChoice<Result<List<'T>,string>>)
+                            //| Choice2Of2 c2 -> Choice2Of2 (c2 :?> 'U)
+                        // return boxed but still keeping type information 
+                        // about 'T in this class
+                        newAsyncData
+                    unwrappedGenericValueTfromAsyncData
+                | _ -> failwith "Invalid boxed async data value"
+            
+            // member this.AsyncDataResult(boxedAsyncData: obj) : AsyncData<obj> = 
+            //     match boxedAsyncData with
+            //     | :? AsyncData<'T> as unboxedAsyncDataOfGenericValueT -> 
+            //         let unwrappedGenericValueTfromAsyncData  =
+            //             match unboxedAsyncDataOfGenericValueT with
+            //             | Choice2List c1 -> Choice2List (box c1)
+            //             //| Choice2Of2 c2 -> Choice2Of2 (box c2)
+            //             // return boxed but still keeping type information 
+            //             // about 'T in this class
+            //         unwrappedGenericValueTfromAsyncData
+            //     | _ -> failwith "Invalid boxed async data value"
+                        
     /// Determine if the given header is present
     let private hdr (headers : IHeaderDictionary) hdr =
         match headers[hdr] with it when it = StringValues.Empty -> None | it -> Some it[0]

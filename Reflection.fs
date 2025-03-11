@@ -3,6 +3,8 @@ module Reflection
 open System
 open FSharp.Linq.RuntimeHelpers
 open Inertial.Giraffe
+open Inertial.Giraffe.Types
+open Inertial.Lib
 open Microsoft.FSharp.Core
 open Microsoft.FSharp.Reflection
 open Microsoft.FSharp.Quotations
@@ -46,38 +48,86 @@ let (|UC|_|) e o =
               else None
             else None
       | _ -> failwith "The UC pattern can only be used against simple union cases"
-      
+
+let recordValueChoice2Evaluator (choiceOption:obj) (filter) (memberName) (asyncDataName: AsyncDataName) =
+    async {
+        match choiceOption with
+        | UC <@ Choice1Of2 @> [v] when filter |> Array.contains memberName || filter |> Array.contains "*" ->
+            let fsharpFuncArgs = choiceOption.GetType().GetGenericArguments()
+            let asyncOfB = fsharpFuncArgs.[0]
+            let genArgAsyncOfB = asyncOfB.GetGenericArguments()                   
+            // B
+            let typeBFromAsyncOfB = genArgAsyncOfB.[0]
+            
+            
+            let asyncBoxer = typedefof<AsyncBoxer<_>>.MakeGenericType(typeBFromAsyncOfB)
+                            |> Activator.CreateInstance 
+                            :?> IAsyncBoxer
+                            
+            let choice2Boxer = typedefof<Choice2Boxer<_,_>>.MakeGenericType(fsharpFuncArgs)
+                            |> Activator.CreateInstance 
+                            :?> IChoice2Boxer
+                                                                    
+            let! asyncResult = asyncBoxer.BoxAsyncResult v
+            let choiceResult = Choice2Of2 asyncResult
+            let result = choice2Boxer.Reboxer choiceResult // Choice<Async<Option<'T>,Option<'T>>
+            let resultBox = choice2Boxer.BoxChoice2Result result
+            let resultAsyncDataBox = choice2Boxer.ReboxToAsyncData resultBox asyncDataName          
+            
+            return resultAsyncDataBox
+        | _ -> return choiceOption
+    }
 let recordValueEvaluator 
     (memberName: string) 
-    (r: obj) 
+    (memberVal: obj) 
     (filter: string array) =
         async {
-            match r with
-            | UC <@ Choice1Of2 @> [v] when filter |> Array.contains memberName || filter |> Array.contains "*" ->
-                // A -> Async<B>
-                let fsharpFuncArgs = r.GetType().GetGenericArguments()
-                let asyncOfB = fsharpFuncArgs.[0]
-                                        
-                // B
-                let typeBFromAsyncOfB = asyncOfB.GetGenericArguments().[0]
-                
-                
-                let asyncBoxer = typedefof<AsyncBoxer<_>>.MakeGenericType(typeBFromAsyncOfB)
-                                |> Activator.CreateInstance 
-                                :?> IAsyncBoxer
-                                
-                let choice2Boxer = typedefof<Choice2Boxer<_,_>>.MakeGenericType(fsharpFuncArgs)
-                                |> Activator.CreateInstance 
-                                :?> IChoice2Boxer
-                                                                        
-                let! asyncResult = asyncBoxer.BoxAsyncResult v
-                let choiceResult = Choice2Of2 asyncResult
-                let result = choice2Boxer.Reboxer choiceResult
-                
-                return result
-
-            | _ -> return r
+            match memberVal with
+            | UC <@ Choice2List @> [choiceOption] ->
+                return! recordValueChoice2Evaluator choiceOption filter memberName AsyncDataName.Choice2List
+            | UC <@ Choice2Option @> [choiceOption] ->
+                return! recordValueChoice2Evaluator choiceOption filter memberName AsyncDataName.Choice2Option
+            | UC <@ Choice2ResultList @> [choiceOption] ->
+                return! recordValueChoice2Evaluator choiceOption filter memberName AsyncDataName.Choice2ResultList
+            | UC <@ Choice2OptionListDecoder @> [choiceOption] ->
+                return! recordValueChoice2Evaluator choiceOption filter memberName AsyncDataName.Choice2OptionList
+            | _ ->
+                return memberVal
         }
+   
+// let recordValueEvaluator 
+//     (memberName: string) 
+//     (r: obj) 
+//     (filter: string array) =
+//         async {
+//             match r with
+//             | UC <@ Choice1Of2 @> [v] when filter |> Array.contains memberName || filter |> Array.contains "*" ->
+//                 // A -> Async<B>
+//                 let fsharpFuncArgs = r.GetType().GetGenericArguments()
+//                 let asyncOfB = fsharpFuncArgs.[0]
+//                                         
+//                 // B
+//                 let typeBFromAsyncOfB = asyncOfB.GetGenericArguments().[0]
+//                 
+//                 
+//                 let asyncBoxer = typedefof<AsyncBoxer<_>>.MakeGenericType(typeBFromAsyncOfB)
+//                                 |> Activator.CreateInstance 
+//                                 :?> IAsyncBoxer
+//                                 
+//                 let choice2Boxer = typedefof<Choice2Boxer<_,_>>.MakeGenericType(fsharpFuncArgs)
+//                                 |> Activator.CreateInstance 
+//                                 :?> IChoice2Boxer
+//                                                                         
+//                 let! asyncResult = asyncBoxer.BoxAsyncResult v
+//                 let choiceResult = Choice2Of2 asyncResult
+//                 let result = choice2Boxer.Reboxer choiceResult
+//                 
+//                 return result
+//
+//             | _ -> return r
+//         }
+
+
     
 let recordEvaluator (r: obj) filter isPartial isFull =
     async {
