@@ -162,7 +162,7 @@
           }
         }
       },
-      "Inertial.Lib/0.1.2": {
+      "Inertial.Lib/0.1.3": {
         "type": "package",
         "dependencies": {
           "FSharp.Core": "9.0.101",
@@ -425,16 +425,26 @@
         "lib/netstandard2.0/Giraffe.ViewEngine.xml"
       ]
     },
-    "Inertial.Lib/0.1.2": {
-      "sha512": "URKeklQwN7TJvI6DtPXzCsao8xt/fElVGoGQAObPRZaijurVCyvgWR4eMfGHVQEEjGCp3ja4Nwxcq9iWxNcM+g==",
+    "Inertial.Lib/0.1.3": {
+      "sha512": "MBrPjMUiQbEMoVwP2Xcvy7if/vCj9wcrDa+wdNIbZubHA3l1IPtZfnf3FE0XOhIla6yjSXh+II1ZaZc8UcWTQA==",
       "type": "package",
-      "path": "inertial.lib/0.1.2",
+      "path": "inertial.lib/0.1.3",
       "files": [
         ".nupkg.metadata",
         ".signature.p7s",
         "LICENSE",
         "README.md",
-        "inertial.lib.0.1.2.nupkg.sha512",
+        "fable/Helpers.fs",
+        "fable/Inertial.Lib.fsproj",
+        "fable/Reflection.fs",
+        "fable/Types.fs",
+        "fable/obj/Debug/netstandard2.0/.NETStandard,Version=v2.0.AssemblyAttributes.fs",
+        "fable/obj/Debug/netstandard2.0/Inertial.Lib.AssemblyInfo.fs",
+        "fable/obj/Debug/netstandard2.1/.NETStandard,Version=v2.1.AssemblyAttributes.fs",
+        "fable/obj/Debug/netstandard2.1/Inertial.Lib.AssemblyInfo.fs",
+        "fable/obj/Release/netstandard2.0/.NETStandard,Version=v2.0.AssemblyAttributes.fs",
+        "fable/obj/Release/netstandard2.0/Inertial.Lib.AssemblyInfo.fs",
+        "inertial.lib.0.1.3.nupkg.sha512",
         "inertial.lib.nuspec",
         "lib/netstandard2.0/Inertial.Lib.dll",
         "lib/netstandard2.0/Inertial.Lib.xml"
@@ -638,7 +648,7 @@
       "FSharp.Core >= 9.0.201",
       "Fable.Remoting.Json >= 2.25.0",
       "Giraffe >= 7.0.2",
-      "Inertial.Lib >= 0.1.2",
+      "Inertial.Lib >= 0.1.3",
       "Microsoft.FSharpLu.Json >= 0.11.7"
     ]
   },
@@ -646,7 +656,7 @@
     "/Users/bdmacrie/.nuget/packages/": {}
   },
   "project": {
-    "version": "0.1.2",
+    "version": "0.1.3",
     "restore": {
       "projectUniqueName": "/Users/bdmacrie/Projects/Inertial.Giraffe/Inertial.Giraffe/Inertial.Giraffe.fsproj",
       "projectName": "Inertial.Giraffe",
@@ -706,7 +716,7 @@
           },
           "Inertial.Lib": {
             "target": "Package",
-            "version": "[0.1.2, )",
+            "version": "[0.1.3, )",
             "generatePathProperty": true
           },
           "Microsoft.FSharpLu.Json": {

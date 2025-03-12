@@ -15,7 +15,7 @@
   <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
     <PkgFSharp_Core Condition=" '$(PkgFSharp_Core)' == '' ">/Users/bdmacrie/.nuget/packages/fsharp.core/9.0.201</PkgFSharp_Core>
     <PkgMicrosoft_FSharpLu_Json Condition=" '$(PkgMicrosoft_FSharpLu_Json)' == '' ">/Users/bdmacrie/.nuget/packages/microsoft.fsharplu.json/0.11.7</PkgMicrosoft_FSharpLu_Json>
-    <PkgInertial_Lib Condition=" '$(PkgInertial_Lib)' == '' ">/Users/bdmacrie/.nuget/packages/inertial.lib/0.1.2</PkgInertial_Lib>
+    <PkgInertial_Lib Condition=" '$(PkgInertial_Lib)' == '' ">/Users/bdmacrie/.nuget/packages/inertial.lib/0.1.3</PkgInertial_Lib>
     <PkgGiraffe Condition=" '$(PkgGiraffe)' == '' ">/Users/bdmacrie/.nuget/packages/giraffe/7.0.2</PkgGiraffe>
     <PkgFSharp_Control_Reactive Condition=" '$(PkgFSharp_Control_Reactive)' == '' ">/Users/bdmacrie/.nuget/packages/fsharp.control.reactive/5.0.5</PkgFSharp_Control_Reactive>
     <PkgFable_Remoting_Json Condition=" '$(PkgFable_Remoting_Json)' == '' ">/Users/bdmacrie/.nuget/packages/fable.remoting.json/2.25.0</PkgFable_Remoting_Json>
