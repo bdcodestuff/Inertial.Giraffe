@@ -75,6 +75,17 @@ let recordValueChoice2Evaluator (choiceOption:obj) (filter) (memberName) (asyncD
             let resultAsyncDataBox = choice2Boxer.ReboxToAsyncData resultBox asyncDataName          
             
             return resultAsyncDataBox
+        | UC <@ Choice1Of2 @> [v] ->
+            let fsharpFuncArgs = choiceOption.GetType().GetGenericArguments()
+                            
+            let choice2Boxer = typedefof<Choice2Boxer<_,_>>.MakeGenericType(fsharpFuncArgs)
+                            |> Activator.CreateInstance 
+                            :?> IChoice2Boxer
+            let choiceResult = Choice1Of2 v
+            let result = choice2Boxer.Reboxer choiceResult // Choice<Async<Option<'T>,Option<'T>>
+            let resultBox = choice2Boxer.BoxChoice2Result result
+            let resultAsyncDataBox = choice2Boxer.ReboxToAsyncData resultBox asyncDataName
+            return resultAsyncDataBox
         | _ -> return choiceOption
     }
 let recordValueEvaluator 
