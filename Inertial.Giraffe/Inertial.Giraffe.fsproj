@@ -1,0 +1,46 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AssemblyName>Inertial.Giraffe</AssemblyName>
+    <RootNamespace>Inertial.Giraffe</RootNamespace>
+    <PackageId>Inertial.Giraffe</PackageId>
+    <Version>0.1.4</Version>
+    <Authors>Bryan Macrie</Authors>
+    <RepositoryUrl>https://github.com/bdcodestuff/Inertial.Giraffe</RepositoryUrl>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="./LICENSE" Pack="true" PackagePath=""/>
+    <None Include="./README.md" Pack="true" PackagePath=""/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="FableJson.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="UrlMap.fs" />
+    <Compile Include="Reflection.fs" />
+    <Compile Include="Library.fs" />
+    <Content Include="README.md" />
+    <Content Include="LICENSE" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fable.Remoting.Json" Version="2.25.0" />
+    <PackageReference Include="FSharp.Control.Reactive" Version="5.0.5" />
+    <PackageReference Include="Giraffe" Version="7.0.2" />
+    <PackageReference Update="FSharp.Core" Version="9.0.201" />    
+    <PackageReference Include="Microsoft.FSharpLu.Json" Version="0.11.7" />    
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Inertial.Lib\src\Inertial.Lib\Inertial.Lib.fsproj" />
+  </ItemGroup>
+  
+</Project>
