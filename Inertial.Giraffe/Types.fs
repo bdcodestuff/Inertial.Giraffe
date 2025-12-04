@@ -154,17 +154,17 @@ module Types =
                     unwrappedGenericValueTUVfromChoice2
                 | _ -> failwith $"Invalid boxed choice2 value {boxedChoice2}"
           
-    type IAsyncDataBoxer =  
+    type IAsyncDataBoxer =
         //abstract AsyncDataResult : obj -> AsyncData<obj>
         abstract Reboxer : obj -> obj
-    
-    type AsyncDataBoxer<'T>() = 
-            
+
+    type AsyncDataBoxer<'T>() =
+
         interface IAsyncDataBoxer with
             member this.Reboxer (boxedAsyncData: obj) =
                 match boxedAsyncData with
                 // 'T,'U must be when initialized with the interface
-                | :? AsyncData<Async<'T>> as unboxedAsyncDataOfGenericValueT -> 
+                | :? AsyncData<Async<'T>> as unboxedAsyncDataOfGenericValueT ->
                     let unwrappedGenericValueTfromAsyncData  =
                         let newAsyncData : AsyncData<'T> =
                             match unboxedAsyncDataOfGenericValueT with
@@ -173,23 +173,43 @@ module Types =
                             | Choice2OptionList c1 -> Choice2OptionList (box c1 :?> AsyncChoice<Option<List<'T>>>)
                             | Choice2ResultList c1 -> Choice2ResultList (box c1 :?> AsyncChoice<Result<List<'T>,string>>)
                             //| Choice2Of2 c2 -> Choice2Of2 (c2 :?> 'U)
-                        // return boxed but still keeping type information 
+                        // return boxed but still keeping type information
                         // about 'T in this class
                         newAsyncData
                     unwrappedGenericValueTfromAsyncData
                 | _ -> failwith "Invalid boxed async data value"
-            
-            // member this.AsyncDataResult(boxedAsyncData: obj) : AsyncData<obj> = 
-            //     match boxedAsyncData with
-            //     | :? AsyncData<'T> as unboxedAsyncDataOfGenericValueT -> 
-            //         let unwrappedGenericValueTfromAsyncData  =
-            //             match unboxedAsyncDataOfGenericValueT with
-            //             | Choice2List c1 -> Choice2List (box c1)
-            //             //| Choice2Of2 c2 -> Choice2Of2 (box c2)
-            //             // return boxed but still keeping type information 
-            //             // about 'T in this class
-            //         unwrappedGenericValueTfromAsyncData
-            //     | _ -> failwith "Invalid boxed async data value"
+
+    // ============================================================================
+    // Deferred<'T> boxing infrastructure (new simplified type)
+    // ============================================================================
+
+    /// Interface for boxing Deferred async operations
+    type IDeferredBoxer =
+        /// Execute the async and return a Loaded Deferred boxed as obj
+        abstract EvaluateAsync : obj -> Async<obj>
+
+    /// Boxer for Deferred<'T> - handles executing the pending async and reboxing
+    type DeferredBoxer<'T>() =
+        interface IDeferredBoxer with
+            member this.EvaluateAsync(boxedDeferred: obj) : Async<obj> =
+                async {
+                    match boxedDeferred with
+                    | :? Deferred<'T> as deferred ->
+                        match deferred with
+                        | Pending asyncOp ->
+                            try
+                                let! result = asyncOp
+                                return box (Loaded result : Deferred<'T>)
+                            with ex ->
+                                return box (Failed ex : Deferred<'T>)
+                        | Loaded _ ->
+                            // Already loaded, return as-is
+                            return boxedDeferred
+                        | Failed _ ->
+                            // Already failed, return as-is
+                            return boxedDeferred
+                    | _ -> return failwith "Invalid boxed Deferred value"
+                }
                         
     /// Determine if the given header is present
     let private hdr (headers : IHeaderDictionary) hdr =

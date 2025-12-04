@@ -155,7 +155,7 @@ module Core =
             head [] [
                 title [] [ str "Index" ]
                 link [ _rel "icon" ; _href "data:," ]
-                //link [ _rel "stylesheet" ; _href (defaultArg cssPath defaultCssPath) ]
+                link [ _rel "stylesheet" ; _href (defaultArg cssPath defaultCssPath) ]
                 link [ _rel "stylesheet" ; _href defaultNProgressPath ]
             ]
         
@@ -325,13 +325,13 @@ module Core =
                         let isSSE = ctx.Request.IsInertialSSE
                         // is response the result of a reload request
                         let isReload = ctx.Request.IsInertialReload
-                        
+
                         // check for client side id passed in via header
                         let connectionId =
                             match connectionId with
                             | Some serverId -> Some serverId
                             | None -> Some ctx.Request.InertialId // hit this branch on full page refresh; will be sent to client then back again in header on XML calls
-                        
+
                         // Evaluate asynchronous props
                         let! propResultAsync = evaluated x.Props filter isPartial isFull
                         

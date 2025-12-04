@@ -27,6 +27,7 @@
     <Compile Include="UrlMap.fs" />
     <Compile Include="Reflection.fs" />
     <Compile Include="Library.fs" />
+    <Compile Include="InertiaBuilder.fs" />
     <Content Include="README.md" />
     <Content Include="LICENSE" />
   </ItemGroup>
