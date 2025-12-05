@@ -5,6 +5,7 @@ open System.Threading.Tasks
 open System.Reactive.Subjects
 open FSharp.Control.Reactive
 open Microsoft.FSharp.Core
+open Microsoft.FSharp.Reflection
 open Microsoft.AspNetCore.Http
 open Microsoft.AspNetCore.Http.Extensions
 open Microsoft.AspNetCore.Antiforgery
@@ -279,6 +280,47 @@ module Core =
         member x.DisableRealtime() =
             x.RealTime <- false
             x
+
+        /// Apply attribute-based defaults from the inner props record type.
+        /// Reads [<ReloadOnMount>] and [<Cacheable>] attributes and configures the response accordingly.
+        /// This eliminates the need to manually call SetReloadOnMount when attributes are already defined.
+        member x.ApplyAttributeDefaults() =
+            match x.Props with
+            | Some props ->
+                // Get the inner record type from the Props union case
+                let propsType = props.GetType()
+                if FSharpType.IsUnion(propsType) then
+                    let _, innerValues = FSharpValue.GetUnionFields(props, propsType)
+                    if innerValues.Length > 0 then
+                        let innerRecord = innerValues.[0]
+                        let innerType = innerRecord.GetType()
+
+                        // Get fields with [<ReloadOnMount>] attribute
+                        let reloadFields = Inertial.Lib.Reflection.findReloadOnMountFields innerType
+
+                        // Get fields with [<Cacheable>] attribute
+                        let cacheableFields = Inertial.Lib.Reflection.findCacheableFields innerType
+
+                        // Apply reload on mount if any fields have the attribute
+                        if reloadFields.Length > 0 then
+                            x.ReloadOnMount <- {
+                                propsToEval = Lazy reloadFields
+                                cacheStorage =
+                                    if cacheableFields.Length > 0 then StoreToCache cacheableFields
+                                    else x.ReloadOnMount.cacheStorage
+                                cacheRetrieval =
+                                    if cacheableFields.Length > 0 then CheckForCached cacheableFields
+                                    else x.ReloadOnMount.cacheRetrieval
+                            }
+                        elif cacheableFields.Length > 0 then
+                            // Only cacheable fields, no reload
+                            x.ReloadOnMount <- {
+                                x.ReloadOnMount with
+                                    cacheStorage = StoreToCache cacheableFields
+                                    cacheRetrieval = CheckForCached cacheableFields
+                            }
+            | None -> ()
+            x
             
         /// Pass in arbitrary function with signature 'Shared -> 'Shared that can alter the 'Shared data in this response only
         member x.UpdateShared(?updater:'Shared ->'Shared ) =
@@ -509,9 +551,26 @@ module Core =
                 jsPath: string,
                 cssPath: string,
                 shareFn: HttpContext -> Task<'Shared>,
-                urlMap: UrlMap.RouteData list,  
+                urlMap: UrlMap.RouteData list,
                 sseInit:'SSE
             ) =
                 svc.AddSingleton<Json.ISerializer, FableRemotingJsonSerializer>() |> ignore
                 svc.TryAddSingleton<Inertia<'Props,'Shared,'SSE>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath),urlMap,shareFn,sseInit))
+                svc
+
+        /// <summary>
+        /// Convenience overload that uses EmptyShared for projects that don't need shared data.
+        /// Only requires Props type parameter - Shared defaults to EmptyShared.
+        /// </summary>
+        [<Extension>]
+        static member AddInertiaWithoutShared<'Props,'SSE>(
+                svc : IServiceCollection,
+                jsPath: string,
+                cssPath: string,
+                urlMap: UrlMap.RouteData list,
+                sseInit:'SSE
+            ) =
+                let emptyShareFn : HttpContext -> Task<EmptyShared> = fun _ -> Task.FromResult(EmptyShared.empty)
+                svc.AddSingleton<Json.ISerializer, FableRemotingJsonSerializer>() |> ignore
+                svc.TryAddSingleton<Inertia<'Props,EmptyShared,'SSE>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath),urlMap,emptyShareFn,sseInit))
                 svc
