@@ -574,3 +574,77 @@ module Core =
                 svc.AddSingleton<Json.ISerializer, FableRemotingJsonSerializer>() |> ignore
                 svc.TryAddSingleton<Inertia<'Props,EmptyShared,'SSE>>(fun _ -> Inertia(InertiaOptions(jsPath=jsPath,cssPath=cssPath),urlMap,emptyShareFn,sseInit))
                 svc
+
+/// Helpers for constructing RealTimePredicates from HttpContext
+[<AutoOpen>]
+module PredicateHelpers =
+
+    /// Creates a UserIdIsOneOf predicate from a user ID extraction function.
+    /// Use this to generalize user-specific predicates across different auth systems.
+    ///
+    /// Example usage:
+    /// ```
+    /// // In your auth helpers:
+    /// let currentUserOnlyPredicate = userIdPredicate getMyUserId
+    ///
+    /// // Where getMyUserId has signature: HttpContext -> Task<string option>
+    /// ```
+    let userIdPredicate (getUserId: HttpContext -> Task<string option>) (ctx: HttpContext) : Task<RealTimePredicates> =
+        task {
+            let! userId = getUserId ctx
+            return UserIdIsOneOf [| match userId with | Some u -> u | None -> () |]
+        }
+
+[<AutoOpen>]
+module SSE =
+    open System.Threading
+    open System.Threading.Tasks
+    open FSharp.Control
+    open FSharp.Control.Reactive
+    open Microsoft.Extensions.Primitives
+    open Microsoft.Extensions.Hosting
+
+    /// Built-in SSE HttpHandler that streams events from the Inertia service.
+    /// Use this in your routes: GET >=> route "/sse" >=> sseHandler
+    let sseHandler<'Props,'Shared,'SSE> : HttpHandler =
+        fun (_: HttpFunc) (ctx: HttpContext) ->
+            task {
+                let inertia = ctx.GetService<Inertia<'Props,'Shared,'SSE>>()
+                let message = inertia.SSE
+
+                // Get both the request abort token and the application stopping token
+                let lifetime = ctx.RequestServices.GetService(typeof<IHostApplicationLifetime>) :?> IHostApplicationLifetime
+                let cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted, lifetime.ApplicationStopping)
+                let ct = cts.Token
+
+                try
+                    ctx.Response.Headers.Append("Content-Type", StringValues "text/event-stream")
+                    ctx.Response.Headers.Append("Cache-Control", StringValues "no-cache")
+
+                    if not ct.IsCancellationRequested then
+                        let tcs = TaskCompletionSource<unit>(TaskCreationOptions.RunContinuationsAsynchronously)
+
+                        // Register for cancellation - this handles both client disconnect AND app shutdown
+                        use _ = ct.Register(fun () -> tcs.TrySetResult() |> ignore)
+
+                        // Subscribe to SSE messages
+                        use _ = message.Subscribe(fun next ->
+                            if not ct.IsCancellationRequested then
+                                try
+                                    let data = string next
+                                    $"id: {ctx.Connection.Id}\n" |> ctx.Response.WriteAsync |> ignore
+                                    $"data: {data}\n\n" |> ctx.Response.WriteAsync |> ignore
+                                    ctx.Response.Body.FlushAsync() |> ignore
+                                with _ -> ()
+                        )
+
+                        // Wait for cancellation
+                        do! tcs.Task
+                with
+                | :? OperationCanceledException -> ()
+                | :? System.IO.IOException -> ()
+                | _ -> ()
+
+                cts.Dispose()
+                return! earlyReturn ctx
+            }
