@@ -10,7 +10,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        global-json-file: global.json
+        global-json-file: src/global.json
 
     - name: Build
-      run: dotnet fsi ./build.fsx
+      run: dotnet fsi ./src/build.fsx

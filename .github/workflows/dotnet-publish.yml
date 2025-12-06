@@ -10,9 +10,9 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        global-json-file: global.json
+        global-json-file: src/global.json
 
     - name: Build & Publish
-      run: dotnet fsi ./build.fsx -- -p Publish
+      run: dotnet fsi ./src/build.fsx -- -p Publish
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
