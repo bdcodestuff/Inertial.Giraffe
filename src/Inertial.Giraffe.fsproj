@@ -17,8 +17,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="./LICENSE" Pack="true" PackagePath=""/>
-    <None Include="./README.md" Pack="true" PackagePath=""/>
+    <None Include="../LICENSE" Pack="true" PackagePath=""/>
+    <None Include="../README.md" Pack="true" PackagePath=""/>
   </ItemGroup>
 
   <ItemGroup>
@@ -28,8 +28,6 @@
     <Compile Include="Reflection.fs" />
     <Compile Include="Library.fs" />
     <Compile Include="InertiaBuilder.fs" />
-    <Content Include="README.md" />
-    <Content Include="LICENSE" />
   </ItemGroup>
 
   <ItemGroup>
@@ -38,11 +36,8 @@
     <PackageReference Include="FSharp.Control.Reactive" Version="5.0.5" />
     <PackageReference Include="Giraffe" Version="8.2.0" />
     <PackageReference Update="FSharp.Core" Version="10.0.100" />
+    <PackageReference Include="Inertial.Lib" Version="0.1.4" />
     <PackageReference Include="Microsoft.FSharpLu.Json" Version="0.11.7" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\Inertial.Lib\src\Inertial.Lib\Inertial.Lib.fsproj" />
   </ItemGroup>
   
 </Project>
