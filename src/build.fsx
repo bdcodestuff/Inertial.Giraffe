@@ -10,6 +10,7 @@ let nugetPushCommand (apiKey: string) : System.FormattableString =
 
 pipeline "Build" {
   description "Build Inertial.Giraffe"
+  workingDir __SOURCE_DIRECTORY__
 
   stage "Restore" {
     run "dotnet restore"
@@ -23,9 +24,10 @@ pipeline "Build" {
 
 pipeline "Publish" {
   description "Publish Inertial.Giraffe to NuGet"
+  workingDir __SOURCE_DIRECTORY__
 
   whenAll {
-    branch "main"
+    branch "master"
 
     whenAny {
       envVar "NUGET_API_KEY"
